@@ -13,9 +13,9 @@ codexU v1.3.0 在 AI 领导力模型之外新增本机推理性能监测：从�
 - **本地优先、隐私优先**：评分全程在 Mac 本机完成，不上传 usage、线程、路径、日志或账户数据。
 
 > [!IMPORTANT]
-> **建议升级到 v1.3.0 或更高版本。** v1.3.0 新增本机推理性能监测，可查看模型 × 推理强度的平均耗时、P50、P90 和有效吞吐。[下载最新版本](https://github.com/shanggqm/codexU/releases/latest)。
+> **建议升级到 v1.3.0 或更高版本。** v1.3.0 新增本机推理性能监测，可查看模型 × 推理强度的平均耗时、P50、P90 和有效吞吐。[下载最新版本](https://github.com/Yvonne-2018/codexU/releases/latest)。
 
-[产品官网](https://shanggqm.github.io/codexU-site/) · [下载最新版本](https://github.com/shanggqm/codexU/releases/latest) · [English](README.en.md)
+[产品官网](https://shanggqm.github.io/codexU-site/) · [下载最新版本](https://github.com/Yvonne-2018/codexU/releases/latest) · [English](README.en.md)
 
 codexU 是一个 macOS 菜单栏与桌面应用，用来查看 OpenAI Codex / ChatGPT Codex 和 Claude Code 的额度窗口、token 用量、今日任务和本机 AI 领导力。它把常用信息放在菜单栏和主窗口里，帮助你快速判断剩余额度、重置时间、当天工作进展，以及一个人正在调动多少 AI 劳动力。
 
@@ -199,7 +199,7 @@ Developer ID 签名和 Apple notarization 流程见 [DISTRIBUTION.md](DISTRIBUTI
 - Claude Code 历史 token：`~/.claude/projects/**/*.jsonl` 中 assistant message 的 `message.usage` 字段。
 - Claude Code 工具、Skill 和任务：transcript 中的 `tool_use.name` / 显式 Skill attribution，以及 `~/.claude/tasks/**/*.json`；Skill 路径缺失时按 Claude Code 的个人、项目、嵌套、插件和旧版 command 路径在当前文件系统中回退推断，无法确认时显示“当前未定位”。
 - Claude Code active 额度：可选读取 `~/Library/Caches/codexU/claude-code/statusline-snapshot.json`；缺失时 5 小时/7 日额度显示为 `--`。
-- 更新检测：默认访问 GitHub Releases API，读取 `shanggqm/codexU` 的公开 release 元数据，并把检查结果缓存到 `~/Library/Caches/codexU/update-check.json`。
+- 更新检测：默认访问 GitHub Releases API，读取 `Yvonne-2018/codexU` 的公开 release 元数据，并把检查结果缓存到 `~/Library/Caches/codexU/update-check.json`。
 
 当前 Codex 额度 API 暴露的是滚动窗口百分比和重置时间，不暴露绝对配额数量；Claude Code 首版只读取本地历史记录和可选 active snapshot，不代表 Claude.ai 官方账单。更完整的数据口径和回退策略见 [RESEARCH.md](RESEARCH.md)。
 

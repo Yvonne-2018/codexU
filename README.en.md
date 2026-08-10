@@ -13,7 +13,7 @@ codexU v1.3.0 adds on-device inference performance monitoring to its AI leadersh
 - **Local and private:** evaluation stays on your Mac and does not upload usage, threads, paths, logs, or account data.
 
 > [!IMPORTANT]
-> **Upgrade to v1.3.0 or later.** v1.3.0 adds on-device inference performance monitoring with model × reasoning-effort duration, P50/P90, and effective-throughput views. [Download the latest release](https://github.com/shanggqm/codexU/releases/latest).
+> **Upgrade to v1.3.0 or later.** v1.3.0 adds on-device inference performance monitoring with model × reasoning-effort duration, P50/P90, and effective-throughput views. [Download the latest release](https://github.com/Yvonne-2018/codexU/releases/latest).
 
 codexU is a macOS menu bar and desktop app for tracking OpenAI Codex / ChatGPT Codex and Claude Code quota, token usage, today's tasks, and local AI leadership. It keeps the information you check most in the menu bar and main window, so you can quickly see remaining quota, reset times, daily progress, and how much AI labor one person is directing.
 
@@ -175,7 +175,7 @@ For Developer ID signing and notarization, see [DISTRIBUTION.md](DISTRIBUTION.md
 - Claude Code historical tokens: assistant `message.usage` fields in `~/.claude/projects/**/*.jsonl`.
 - Claude Code tools, Skills, and tasks: transcript `tool_use.name` / explicit Skill attribution, plus `~/.claude/tasks/**/*.json`. When a Skill path is absent, codexU infers it from Claude Code's current personal, project, nested, plugin, and legacy-command locations; unresolved history is shown as “not located.”
 - Claude Code active quota: optional `~/Library/Caches/codexU/claude-code/statusline-snapshot.json`; without it, 5-hour and 7-day quota show `--`.
-- Update checks: default access to the GitHub Releases API for public `shanggqm/codexU` release metadata, cached in `~/Library/Caches/codexU/update-check.json`.
+- Update checks: default access to the GitHub Releases API for public `Yvonne-2018/codexU` release metadata, cached in `~/Library/Caches/codexU/update-check.json`.
 
 Current Codex quota APIs expose rolling-window percentages and reset times, not absolute account quota sizes. Claude Code support reads local history and an optional active snapshot; it is not a Claude.ai official billing view. See [RESEARCH.md](RESEARCH.md) for the data model and fallback behavior.
 
