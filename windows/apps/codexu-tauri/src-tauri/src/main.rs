@@ -2,9 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::Arc;
+use std::time::Duration;
 
-use tauri::Manager;
-use tracing::info;
+use tauri::{Emitter, Manager};
+use tracing::{info, warn};
 
 mod app_state;
 mod commands;
@@ -16,6 +17,31 @@ const BACKGROUND_CAPTURE_ARGUMENT: &str = "--codexu-native-capture-background";
 
 fn is_background_capture() -> bool {
     std::env::args().any(|argument| argument == BACKGROUND_CAPTURE_ARGUMENT)
+}
+
+/// Spawns a background task that periodically refreshes the Codex usage snapshot
+/// and pushes a `usage:updated` event so an open dashboard stays current without
+/// requiring manual refreshes. The interval is read from `refresh_interval_secs`
+/// on every cycle so settings changes take effect without a restart.
+fn spawn_usage_auto_refresh(app: tauri::AppHandle, state: Arc<AppState>) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let interval_secs = {
+                let config = state.config.read().await;
+                config.refresh_interval_secs.max(10)
+            };
+            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+
+            match state.refresh_usage().await {
+                Ok(_) => {
+                    let _ = app.emit("usage:updated", ());
+                }
+                Err(error) => {
+                    warn!(error = %error, "Background usage auto-refresh failed");
+                }
+            }
+        }
+    });
 }
 
 #[cfg(windows)]
@@ -119,6 +145,7 @@ fn main() {
                 .map(|config| config.language.resolved(app_state::ResolvedLanguage::En))
                 .unwrap_or(app_state::ResolvedLanguage::En);
             app.manage(state.clone());
+            spawn_usage_auto_refresh(app.handle().clone(), state);
 
             let background_capture = is_background_capture();
 

@@ -281,25 +281,52 @@ fn launch_app_server(port: u16) -> anyhow::Result<Child> {
 }
 
 fn resolve_codex_executable() -> Option<PathBuf> {
-    let app_data = env::var_os("APPDATA")?;
-    let (package, triple) = if cfg!(target_arch = "aarch64") {
-        ("codex-win32-arm64", "aarch64-pc-windows-msvc")
-    } else {
-        ("codex-win32-x64", "x86_64-pc-windows-msvc")
-    };
-    let candidate = PathBuf::from(app_data)
-        .join("npm")
-        .join("node_modules")
-        .join("@openai")
-        .join("codex")
-        .join("node_modules")
-        .join("@openai")
-        .join(package)
-        .join("vendor")
-        .join(triple)
-        .join("bin")
-        .join("codex.exe");
-    candidate.is_file().then_some(candidate)
+    let mut candidates = Vec::new();
+
+    if let Some(user_profile) = env::var_os("USERPROFILE") {
+        let user_dir = PathBuf::from(user_profile);
+        candidates.push(user_dir.join(".codex").join(".sandbox-bin").join("codex.exe"));
+        candidates.push(user_dir.join(".local").join("bin").join("codex.exe"));
+    }
+
+    if let Some(app_data) = env::var_os("APPDATA") {
+        let (package, triple) = if cfg!(target_arch = "aarch64") {
+            ("codex-win32-arm64", "aarch64-pc-windows-msvc")
+        } else {
+            ("codex-win32-x64", "x86_64-pc-windows-msvc")
+        };
+        candidates.push(
+            PathBuf::from(app_data)
+                .join("npm")
+                .join("node_modules")
+                .join("@openai")
+                .join("codex")
+                .join("node_modules")
+                .join("@openai")
+                .join(package)
+                .join("vendor")
+                .join(triple)
+                .join("bin")
+                .join("codex.exe"),
+        );
+    }
+
+    if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+        candidates.push(
+            PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("codex")
+                .join("codex.exe"),
+        );
+    }
+
+    if let Some(path) = env::var_os("PATH") {
+        for dir in env::split_paths(&path) {
+            candidates.push(dir.join("codex.exe"));
+        }
+    }
+
+    candidates.into_iter().find(|candidate| candidate.is_file())
 }
 
 async fn reserve_loopback_port() -> anyhow::Result<u16> {

@@ -31,6 +31,7 @@ fn local_dashboard() -> CodexDashboardSnapshot {
             quota_source_label: "Checking official Codex quota".to_string(),
             usage_source_label: "Local Codex transcript data".to_string(),
         },
+        claude_code: None,
         leadership: CodexLeadershipSignal {
             score: None,
             evidence_coverage: 0.0,

@@ -103,7 +103,7 @@ windows/
     │           ├── common.rs              ← 聚合、缓存、成本估算
     │           ├── codex_state.rs         ← 新增：state_5.sqlite 读取
     │           ├── codex_transcript.rs    ← Codex JSONL + 元数据富化
-    │           └── claude_transcript.rs   ← Claude Code JSONL（保留，待激活）
+    │           └── claude_transcript.rs   ← Claude Code JSONL（已接入 dashboard）
     └── codexu-cli/
         ├── Cargo.toml
         └── src/

@@ -117,6 +117,11 @@ pub struct MultiRuntimeUsageSnapshot {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CodexDashboardSnapshot {
     pub codex: RuntimeUsageSnapshot,
+    /// Optional Claude Code runtime snapshot. On Windows this is local-only
+    /// transcript data (no official quota path yet). `#[serde(default)]` keeps
+    /// old cached dashboard JSON (written before this field existed) loadable.
+    #[serde(default)]
+    pub claude_code: Option<RuntimeUsageSnapshot>,
     pub leadership: CodexLeadershipSignal,
     #[serde(with = "chrono::serde::ts_milliseconds")]
     pub refreshed_at: chrono::DateTime<chrono::Utc>,

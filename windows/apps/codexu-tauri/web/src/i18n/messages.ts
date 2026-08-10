@@ -65,6 +65,10 @@ const en = {
       recordInsufficient: 'Record insufficient',
       estimated: '${value} est.',
     },
+    runtime: {
+      codex: 'Codex',
+      claudeCode: 'Claude Code',
+    },
   },
   tasks: {
     title: 'Tasks',
@@ -332,6 +336,10 @@ const zhHans: MessageShape<typeof en> = {
       lifetime: '累计',
       recordInsufficient: '记录不足',
       estimated: '${value} 估算',
+    },
+    runtime: {
+      codex: 'Codex',
+      claudeCode: 'Claude Code',
     },
   },
   tasks: {

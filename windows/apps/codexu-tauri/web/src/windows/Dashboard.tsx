@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, CircleDashed } from 'lucide-react';
 import { Header } from '../components/Header';
 import { DashboardHome } from '../components/DashboardHome';
@@ -20,10 +20,15 @@ export function Dashboard() {
     );
   }, [settings?.config.theme, settings?.config.palette_id]);
 
-  const localUsage = dashboard?.codex?.snapshot?.local ?? null;
+  const [activeRuntime, setActiveRuntime] = useState<'codex' | 'claude_code'>('codex');
+  const codexRuntime = dashboard?.codex ?? null;
+  const claudeRuntime = dashboard?.claude_code ?? null;
+  const activeRuntimeRef = activeRuntime === 'claude_code' ? claudeRuntime : codexRuntime;
+  const activeSnapshot = activeRuntimeRef?.snapshot ?? null;
+  const localUsage = activeSnapshot?.local ?? null;
   const lastUpdated =
-    dashboard?.codex?.snapshot?.refreshed_at ?? dashboard?.refreshed_at ?? localUsage?.last_updated_at ?? null;
-  const quotaStatus = dashboard?.codex?.status ?? 'local_only';
+    activeSnapshot?.refreshed_at ?? dashboard?.refreshed_at ?? localUsage?.last_updated_at ?? null;
+  const quotaStatus = activeRuntimeRef?.status ?? 'local_only';
   const quotaStatusLabel =
     quotaStatus === 'available'
       ? t('dashboard.status.officialQuotaActive')
@@ -102,6 +107,35 @@ export function Dashboard() {
         )}
 
         <div className="max-w-6xl mx-auto w-full space-y-6">
+          <div className="flex items-center justify-center">
+            <div
+              className="flex items-center glass-toolbar rounded-full p-0.5"
+              role="tablist"
+              aria-label={t('dashboard.runtime.codex')}
+            >
+              <button
+                role="tab"
+                aria-selected={activeRuntime === 'codex'}
+                onClick={() => setActiveRuntime('codex')}
+                className={`px-4 py-1.5 rounded-full text-sm transition-all ${
+                  activeRuntime === 'codex' ? 'glass-button-solid' : 'text-secondary glass-button'
+                }`}
+              >
+                {t('dashboard.runtime.codex')}
+              </button>
+              <button
+                role="tab"
+                aria-selected={activeRuntime === 'claude_code'}
+                onClick={() => setActiveRuntime('claude_code')}
+                className={`px-4 py-1.5 rounded-full text-sm transition-all ${
+                  activeRuntime === 'claude_code' ? 'glass-button-solid' : 'text-secondary glass-button'
+                }`}
+              >
+                {t('dashboard.runtime.claudeCode')}
+              </button>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className={`inline-flex items-center gap-1.5 chip-like ${quotaStatusClass}`}>
@@ -128,8 +162,8 @@ export function Dashboard() {
           ) : null}
 
           <DashboardHome
-            snapshot={dashboard?.codex?.snapshot}
-            quotaSourceLabel={dashboard?.codex?.quota_source_label}
+            snapshot={activeSnapshot}
+            quotaSourceLabel={activeRuntimeRef?.quota_source_label}
             leadershipSignal={dashboard?.leadership ?? null}
             onQuotaRefresh={refresh}
           />

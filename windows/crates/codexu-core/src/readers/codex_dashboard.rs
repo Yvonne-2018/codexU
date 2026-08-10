@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use crate::models::*;
 use crate::readers::{
     build_leadership_snapshot, CodexAppServerQuotaSnapshot, CodexStateReader, CodexTaskBoardReader,
-    CodexThreadMetadata, CodexTranscriptReader,
+    CodexThreadMetadata, CodexTranscriptReader, ClaudeCodeTranscriptReader,
 };
 
 /// Default leadership period for dashboard visibility.
@@ -31,6 +31,9 @@ const METADATA_WARNING: &str =
 pub struct CodexDashboardProvider {
     codex_root: PathBuf,
     cache_dir: PathBuf,
+    /// Claude Code projects root; defaults to `~/.claude/projects` when unset.
+    /// Injectable so tests stay isolated from the real user home directory.
+    claude_projects_root: Option<PathBuf>,
 }
 
 /// Applies only an authoritative app-server quota result to a local dashboard
@@ -99,7 +102,14 @@ impl CodexDashboardProvider {
         Self {
             codex_root: codex_root.as_ref().to_path_buf(),
             cache_dir: cache_dir.as_ref().to_path_buf(),
+            claude_projects_root: None,
         }
+    }
+
+    /// Overrides the Claude Code projects root (defaults to `~/.claude/projects`).
+    pub fn with_claude_projects_root(mut self, claude_projects_root: impl AsRef<Path>) -> Self {
+        self.claude_projects_root = Some(claude_projects_root.as_ref().to_path_buf());
+        self
     }
 
     /// Loads a single Codex dashboard snapshot from local state.
@@ -128,12 +138,30 @@ impl CodexDashboardProvider {
             .await
             .unwrap_or(None);
 
+        let claude_code = self.load_claude_code_snapshot(now).await;
+
         Ok(Some(CodexDashboardSnapshot {
             codex: build_codex_runtime_snapshot(local_usage, task_board, now),
+            claude_code,
             leadership: leadership_signal,
             refreshed_at: now,
             messages,
         }))
+    }
+
+    /// Loads a Claude Code runtime snapshot from local `~/.claude/projects`
+    /// transcripts. Windows has no official Claude Code quota path yet, so the
+    /// snapshot is always `LocalOnly`; returns `None` when no transcript data
+    /// exists or the read fails.
+    async fn load_claude_code_snapshot(&self, now: DateTime<Utc>) -> Option<RuntimeUsageSnapshot> {
+        let projects_root = self.claude_projects_root.clone().or_else(|| {
+            dirs::home_dir().map(|home| home.join(".claude").join("projects"))
+        })?;
+        let reader = ClaudeCodeTranscriptReader::new(&self.cache_dir);
+        match reader.load_local_usage(projects_root, now).await {
+            Ok(Some(local)) => Some(build_claude_code_runtime_snapshot(local, now)),
+            _ => None,
+        }
     }
 
     async fn load_state_metadata(
@@ -190,6 +218,37 @@ fn build_codex_runtime_snapshot(
         status: RuntimeMenuStatus::LocalOnly,
         quota_source_label: "Checking official Codex quota".to_string(),
         usage_source_label: "Local Codex transcript data".to_string(),
+    }
+}
+
+fn build_claude_code_runtime_snapshot(
+    local: LocalUsage,
+    refreshed_at: DateTime<Utc>,
+) -> RuntimeUsageSnapshot {
+    let usage = UsageSnapshot {
+        refreshed_at,
+        account: AccountInfo {
+            r#type: "claude-code-local".to_string(),
+            plan_type: None,
+            email_present: false,
+        },
+        limit_id: "claude-code-local".to_string(),
+        limit_name: "Claude Code local snapshot (no official quota)".to_string(),
+        quota_read_succeeded: false,
+        five_hour_quota: None,
+        seven_day_quota: None,
+        monthly_quota: None,
+        local: Some(local),
+        task_board: None,
+        messages: vec![],
+    };
+
+    RuntimeUsageSnapshot {
+        scope: RuntimeScope::ClaudeCode,
+        snapshot: usage,
+        status: RuntimeMenuStatus::LocalOnly,
+        quota_source_label: "Claude Code official quota is not available on Windows yet; showing local usage only".to_string(),
+        usage_source_label: "Local Claude Code transcript data".to_string(),
     }
 }
 
@@ -343,7 +402,8 @@ mod tests {
         );
 
         let now = Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap();
-        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"));
+        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"))
+            .with_claude_projects_root(temp.path().join("claude_projects"));
         let snapshot = provider
             .load_dashboard_snapshot(now)
             .await
@@ -363,7 +423,8 @@ mod tests {
     #[tokio::test]
     async fn no_local_session_summaries_returns_none() {
         let temp = tempdir().unwrap();
-        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"));
+        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"))
+            .with_claude_projects_root(temp.path().join("claude_projects"));
 
         let snapshot = provider
             .load_dashboard_snapshot(Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap())
@@ -399,7 +460,8 @@ mod tests {
             ],
         );
         let cache = temp.path().join("cache");
-        let provider = CodexDashboardProvider::new(temp.path(), &cache);
+        let provider = CodexDashboardProvider::new(temp.path(), &cache)
+            .with_claude_projects_root(temp.path().join("claude_projects"));
 
         let snapshot = provider
             .load_dashboard_snapshot(now)
@@ -433,6 +495,8 @@ mod tests {
             snapshot.codex.snapshot.local.as_ref().unwrap().thread_count,
             1
         );
+        // 注入的 Claude projects 目录为空 → 无 claude_code 快照。
+        assert!(snapshot.claude_code.is_none());
         assert!(snapshot.messages.is_empty());
     }
 
@@ -453,7 +517,8 @@ mod tests {
             ],
         );
 
-        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"));
+        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"))
+            .with_claude_projects_root(temp.path().join("claude_projects"));
         let snapshot = provider
             .load_dashboard_snapshot(now)
             .await
@@ -487,7 +552,8 @@ mod tests {
             ],
         );
 
-        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"));
+        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"))
+            .with_claude_projects_root(temp.path().join("claude_projects"));
         let snapshot = provider
             .load_dashboard_snapshot(now)
             .await
@@ -528,7 +594,8 @@ mod tests {
             ],
         );
 
-        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"));
+        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"))
+            .with_claude_projects_root(temp.path().join("claude_projects"));
         let snapshot = provider
             .load_dashboard_snapshot(now)
             .await
@@ -574,7 +641,8 @@ mod tests {
             ],
         );
 
-        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"));
+        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"))
+            .with_claude_projects_root(temp.path().join("claude_projects"));
         let snapshot = provider
             .load_dashboard_snapshot(now)
             .await
@@ -583,6 +651,64 @@ mod tests {
 
         assert!(snapshot.codex.snapshot.local.is_some());
         assert!(snapshot.leadership.score.is_none());
+    }
+
+    #[tokio::test]
+    async fn claude_transcripts_build_claude_code_local_snapshot() {
+        let temp = tempdir().unwrap();
+        let archived = temp.path().join("archived_sessions");
+        std::fs::create_dir_all(&archived).unwrap();
+
+        // 需要一份 Codex 会话摘要，dashboard 才会产出整体快照。
+        let session = archived.join("rollout-claude-sidecar.jsonl");
+        write_session_file(
+            &session,
+            vec![
+                r#"{"timestamp":"2026-07-28T11:59:00.000Z","type":"session_meta","payload":{"id":"session-blueprint","cwd":"C:\\workspace"}}"#,
+                r#"{"timestamp":"2026-07-28T12:00:00.000Z","type":"event_msg","payload":{"type":"token_count","turn_id":"turn-1","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":120}}}}"#,
+            ],
+        );
+
+        // 独立的 Claude projects 目录，只放一条 transcript。
+        let claude_root = temp.path().join("claude_projects").join("-C-Users-Demo");
+        std::fs::create_dir_all(&claude_root).unwrap();
+        write_session_file(
+            &claude_root.join("session-1.jsonl"),
+            vec![
+                r#"{"timestamp":"2026-07-28T11:00:00.000Z","type":"user","message":{"id":"msg-1","model":"claude-sonnet-4-5","usage":{"input_tokens":100,"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":40,"reasoning_output_tokens":10,"total_tokens":200}}}"#,
+            ],
+        );
+
+        let now = Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap();
+        let provider = CodexDashboardProvider::new(temp.path(), temp.path().join("cache"))
+            .with_claude_projects_root(temp.path().join("claude_projects"));
+        let snapshot = provider
+            .load_dashboard_snapshot(now)
+            .await
+            .unwrap()
+            .expect("should produce snapshot");
+
+        let claude = snapshot
+            .claude_code
+            .as_ref()
+            .expect("should produce claude code snapshot");
+        assert_eq!(claude.scope, RuntimeScope::ClaudeCode);
+        assert_eq!(claude.status, RuntimeMenuStatus::LocalOnly);
+        assert!(!claude.snapshot.quota_read_succeeded);
+        assert!(claude.snapshot.five_hour_quota.is_none());
+        assert_eq!(
+            claude.usage_source_label,
+            "Local Claude Code transcript data"
+        );
+        let local = claude.snapshot.local.as_ref().expect("local usage");
+        assert_eq!(local.thread_count, 1);
+        assert_eq!(local.lifetime_tokens, 200);
+        assert_eq!(local.today_tokens, 200);
+        // Codex 侧照常存在。
+        assert_eq!(
+            snapshot.codex.snapshot.local.as_ref().unwrap().thread_count,
+            1
+        );
     }
 
     #[test]
@@ -656,6 +782,7 @@ mod tests {
         let leadership = build_codex_leadership_signal(&leadership_snapshot);
         let snapshot = CodexDashboardSnapshot {
             codex: runtime,
+            claude_code: None,
             leadership,
             refreshed_at: now,
             messages: vec!["Local Codex snapshot".to_string()],
@@ -668,5 +795,14 @@ mod tests {
 
         let roundtrip: CodexDashboardSnapshot = serde_json::from_str(&json).unwrap();
         assert_eq!(snapshot, roundtrip);
+
+        // 旧缓存 JSON 没有 claude_code 字段，也应能反序列化（#[serde(default)]）。
+        let mut legacy_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        legacy_value
+            .as_object_mut()
+            .unwrap()
+            .remove("claude_code");
+        let legacy: CodexDashboardSnapshot = serde_json::from_value(legacy_value).unwrap();
+        assert_eq!(legacy.claude_code, None);
     }
 }

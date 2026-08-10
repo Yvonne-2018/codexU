@@ -466,6 +466,7 @@ mod tests {
                 quota_source_label: "Official quota unavailable on Windows".to_string(),
                 usage_source_label: "Local Codex transcript data".to_string(),
             },
+            claude_code: None,
             leadership: CodexLeadershipSignal {
                 score: None,
                 evidence_coverage: 0.0,

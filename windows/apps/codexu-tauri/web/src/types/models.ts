@@ -268,7 +268,7 @@ export interface UsageSnapshot {
   messages: string[];
 }
 
-export type RuntimeScope = 'codex';
+export type RuntimeScope = 'codex' | 'claude_code';
 
 export type RuntimeMenuStatus = 'available' | 'local_only' | 'snapshot_needed' | 'stale' | 'unavailable';
 
@@ -282,6 +282,7 @@ export interface RuntimeUsageSnapshot {
 
 export interface CodexDashboardSnapshot {
   codex: RuntimeUsageSnapshot;
+  claude_code: RuntimeUsageSnapshot | null;
   leadership: CodexLeadershipSignal;
   refreshed_at: number;
   messages: string[];

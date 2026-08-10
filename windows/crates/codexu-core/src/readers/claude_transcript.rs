@@ -3,10 +3,11 @@
 //! Translates the Swift `ClaudeCodeRuntimeProvider` logic to Rust.
 //! Reads `~/.claude/projects/**/*.jsonl` on any platform and produces `LocalUsage`.
 //!
-//! NOTE: This provider is currently **deferred** on Windows because Claude Code
-//! does not yet write project transcripts to `%USERPROFILE%\.claude\projects`.
-//! The implementation is kept intact for macOS parity and future activation once
-//! the data path appears.
+//! NOTE: This provider is now **active on Windows** (`CodexDashboardProvider`
+//! reads `%USERPROFILE%\.claude\projects` when building the dashboard snapshot).
+//! Newer Claude Code versions write project transcripts to that path on Windows,
+//! same as on macOS. Windows still has no official Claude Code quota path, so
+//! the dashboard always treats Claude Code as local-only.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
