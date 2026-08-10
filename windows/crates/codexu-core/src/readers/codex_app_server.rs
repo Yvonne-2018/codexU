@@ -19,6 +19,11 @@ const MONTHLY_MAX_DURATION_MINS: i64 = 31 * 24 * 60;
 const APP_SERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const APP_SERVER_REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
 
+/// `CREATE_NO_WINDOW`: prevents the console-subsystem Codex CLI from flashing a
+/// terminal window when spawned from the GUI host (e.g. on each auto-refresh).
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Official rate-limit data read from the local Codex app-server.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CodexAppServerQuotaSnapshot {
@@ -270,12 +275,18 @@ fn selected_rate_limits(response: &Value) -> Option<&Value> {
 fn launch_app_server(port: u16) -> anyhow::Result<Child> {
     let executable = resolve_codex_executable()
         .ok_or_else(|| anyhow::anyhow!("Could not locate the installed Codex CLI executable"))?;
-    Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .args(["app-server", "--listen", &format!("ws://127.0.0.1:{port}")])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .kill_on_drop(true)
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    {
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
         .spawn()
         .map_err(|_| anyhow::anyhow!("Could not launch the installed Codex CLI"))
 }
