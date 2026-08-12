@@ -6,8 +6,8 @@ use chrono::{DateTime, Utc};
 
 use crate::models::*;
 use crate::readers::{
-    build_leadership_snapshot, CodexAppServerQuotaSnapshot, CodexStateReader, CodexTaskBoardReader,
-    CodexThreadMetadata, CodexTranscriptReader, ClaudeCodeTranscriptReader,
+    build_leadership_snapshot, ClaudeCodeTranscriptReader, CodexAppServerQuotaSnapshot,
+    CodexStateReader, CodexTaskBoardReader, CodexThreadMetadata, CodexTranscriptReader,
 };
 
 /// Default leadership period for dashboard visibility.
@@ -154,9 +154,10 @@ impl CodexDashboardProvider {
     /// snapshot is always `LocalOnly`; returns `None` when no transcript data
     /// exists or the read fails.
     async fn load_claude_code_snapshot(&self, now: DateTime<Utc>) -> Option<RuntimeUsageSnapshot> {
-        let projects_root = self.claude_projects_root.clone().or_else(|| {
-            dirs::home_dir().map(|home| home.join(".claude").join("projects"))
-        })?;
+        let projects_root = self
+            .claude_projects_root
+            .clone()
+            .or_else(|| dirs::home_dir().map(|home| home.join(".claude").join("projects")))?;
         let reader = ClaudeCodeTranscriptReader::new(&self.cache_dir);
         match reader.load_local_usage(projects_root, now).await {
             Ok(Some(local)) => Some(build_claude_code_runtime_snapshot(local, now)),
@@ -247,7 +248,9 @@ fn build_claude_code_runtime_snapshot(
         scope: RuntimeScope::ClaudeCode,
         snapshot: usage,
         status: RuntimeMenuStatus::LocalOnly,
-        quota_source_label: "Claude Code official quota is not available on Windows yet; showing local usage only".to_string(),
+        quota_source_label:
+            "Claude Code official quota is not available on Windows yet; showing local usage only"
+                .to_string(),
         usage_source_label: "Local Claude Code transcript data".to_string(),
     }
 }
@@ -798,10 +801,7 @@ mod tests {
 
         // 旧缓存 JSON 没有 claude_code 字段，也应能反序列化（#[serde(default)]）。
         let mut legacy_value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        legacy_value
-            .as_object_mut()
-            .unwrap()
-            .remove("claude_code");
+        legacy_value.as_object_mut().unwrap().remove("claude_code");
         let legacy: CodexDashboardSnapshot = serde_json::from_value(legacy_value).unwrap();
         assert_eq!(legacy.claude_code, None);
     }
