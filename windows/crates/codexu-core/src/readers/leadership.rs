@@ -295,15 +295,17 @@ fn build_report(
 
 fn classify_worker_kind(session: &SessionSummary) -> (LeadershipWorkerKind, Option<String>, bool) {
     match session.thread_source.as_deref() {
-        Some("main") => (LeadershipWorkerKind::Main, None, true),
         Some("subagent") => (LeadershipWorkerKind::Subagent, None, true),
         Some("automation") => (
             LeadershipWorkerKind::Automation,
             extract_automation_id(session.title.as_deref()),
             true,
         ),
-        Some(_) => (LeadershipWorkerKind::Main, None, false),
-        None => (LeadershipWorkerKind::Main, None, false),
+        // Codex labels main threads as `user` (macOS treats any non-subagent /
+        // non-automation source as a main worker). Missing or unknown sources
+        // are also main: they stay factual only when timestamps pass the
+        // `interval_has_factual_timing` gate (requires a created_at from SQLite).
+        _ => (LeadershipWorkerKind::Main, None, true),
     }
 }
 
@@ -1030,6 +1032,47 @@ mod tests {
         assert_eq!(report.project_count, 1);
         assert_eq!(report.agent_count, Some(1));
         assert!(!report.projects.is_empty());
+    }
+
+    #[test]
+    fn user_thread_source_scores_as_factual_main_like_macos() {
+        let now = Utc
+            .with_ymd_and_hms(2026, 7, 28, 12, 0, 0)
+            .single()
+            .unwrap();
+        let session = mock_session(
+            "thread-user",
+            "C:\\Projects\\User",
+            Some("user"),
+            None,
+            LeadershipEvidenceQuality::Fact,
+            30,
+            30,
+            Some("User-driven session"),
+            Some(Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap() - Duration::minutes(45)),
+        );
+        let (kind, _, has_factual_source) = classify_worker_kind(&session);
+        assert_eq!(kind, LeadershipWorkerKind::Main);
+        assert!(has_factual_source, "user threads must be a factual source");
+
+        let snapshot = build_leadership_snapshot(&[session], now);
+        let report = snapshot
+            .reports
+            .iter()
+            .find(|r| r.period == "today")
+            .unwrap();
+        assert!(
+            report.score.is_some(),
+            "user main thread should contribute to the score"
+        );
+        let report28 = snapshot
+            .reports
+            .iter()
+            .find(|r| r.period == "twentyEightDays")
+            .unwrap();
+        assert!(report28.score.is_some());
+        assert_eq!(report28.agent_count, Some(1));
+        assert_eq!(report28.project_count, 1);
     }
 
     #[test]
