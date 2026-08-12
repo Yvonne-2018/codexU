@@ -296,7 +296,12 @@ fn resolve_codex_executable() -> Option<PathBuf> {
 
     if let Some(user_profile) = env::var_os("USERPROFILE") {
         let user_dir = PathBuf::from(user_profile);
-        candidates.push(user_dir.join(".codex").join(".sandbox-bin").join("codex.exe"));
+        candidates.push(
+            user_dir
+                .join(".codex")
+                .join(".sandbox-bin")
+                .join("codex.exe"),
+        );
         candidates.push(user_dir.join(".local").join("bin").join("codex.exe"));
     }
 
