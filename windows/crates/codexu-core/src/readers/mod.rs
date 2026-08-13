@@ -1,3 +1,4 @@
+pub mod claude_task_board;
 pub mod claude_transcript;
 pub mod codex_app_server;
 pub mod codex_dashboard;
@@ -7,6 +8,7 @@ pub mod codex_transcript;
 pub mod common;
 pub mod leadership;
 
+pub use claude_task_board::ClaudeTaskBoardReader;
 pub use claude_transcript::ClaudeCodeTranscriptReader;
 pub use codex_app_server::{read_installed_codex_quota, CodexAppServerQuotaSnapshot};
 pub use codex_dashboard::{

@@ -6,8 +6,9 @@ use chrono::{DateTime, Utc};
 
 use crate::models::*;
 use crate::readers::{
-    build_leadership_snapshot, ClaudeCodeTranscriptReader, CodexAppServerQuotaSnapshot,
-    CodexStateReader, CodexTaskBoardReader, CodexThreadMetadata, CodexTranscriptReader,
+    build_leadership_snapshot, ClaudeCodeTranscriptReader, ClaudeTaskBoardReader,
+    CodexAppServerQuotaSnapshot, CodexStateReader, CodexTaskBoardReader, CodexThreadMetadata,
+    CodexTranscriptReader,
 };
 
 /// Default leadership period for dashboard visibility.
@@ -34,6 +35,8 @@ pub struct CodexDashboardProvider {
     /// Claude Code projects root; defaults to `~/.claude/projects` when unset.
     /// Injectable so tests stay isolated from the real user home directory.
     claude_projects_root: Option<PathBuf>,
+    /// Claude Code tasks root; defaults to `~/.claude/tasks` when unset.
+    claude_tasks_root: Option<PathBuf>,
 }
 
 /// Applies only an authoritative app-server quota result to a local dashboard
@@ -103,12 +106,19 @@ impl CodexDashboardProvider {
             codex_root: codex_root.as_ref().to_path_buf(),
             cache_dir: cache_dir.as_ref().to_path_buf(),
             claude_projects_root: None,
+            claude_tasks_root: None,
         }
     }
 
     /// Overrides the Claude Code projects root (defaults to `~/.claude/projects`).
     pub fn with_claude_projects_root(mut self, claude_projects_root: impl AsRef<Path>) -> Self {
         self.claude_projects_root = Some(claude_projects_root.as_ref().to_path_buf());
+        self
+    }
+
+    /// Overrides the Claude Code tasks root (defaults to `~/.claude/tasks`).
+    pub fn with_claude_tasks_root(mut self, claude_tasks_root: impl AsRef<Path>) -> Self {
+        self.claude_tasks_root = Some(claude_tasks_root.as_ref().to_path_buf());
         self
     }
 
@@ -150,9 +160,9 @@ impl CodexDashboardProvider {
     }
 
     /// Loads a Claude Code runtime snapshot from local `~/.claude/projects`
-    /// transcripts. Windows has no official Claude Code quota path yet, so the
-    /// snapshot is always `LocalOnly`; returns `None` when no transcript data
-    /// exists or the read fails.
+    /// transcripts and `~/.claude/tasks` task records. Windows has no official
+    /// Claude Code quota path yet, so the snapshot is always `LocalOnly`;
+    /// returns `None` when no transcript data exists or the read fails.
     async fn load_claude_code_snapshot(&self, now: DateTime<Utc>) -> Option<RuntimeUsageSnapshot> {
         let projects_root = self
             .claude_projects_root
@@ -160,7 +170,21 @@ impl CodexDashboardProvider {
             .or_else(|| dirs::home_dir().map(|home| home.join(".claude").join("projects")))?;
         let reader = ClaudeCodeTranscriptReader::new(&self.cache_dir);
         match reader.load_local_usage(projects_root, now).await {
-            Ok(Some(local)) => Some(build_claude_code_runtime_snapshot(local, now)),
+            Ok(Some(local)) => {
+                let tasks_root = self
+                    .claude_tasks_root
+                    .clone()
+                    .or_else(|| dirs::home_dir().map(|home| home.join(".claude").join("tasks")));
+                let task_board = match tasks_root {
+                    Some(root) => ClaudeTaskBoardReader::new(root)
+                        .load(now)
+                        .await
+                        .ok()
+                        .flatten(),
+                    None => None,
+                };
+                Some(build_claude_code_runtime_snapshot(local, task_board, now))
+            }
             _ => None,
         }
     }
@@ -224,6 +248,7 @@ fn build_codex_runtime_snapshot(
 
 fn build_claude_code_runtime_snapshot(
     local: LocalUsage,
+    task_board: Option<TaskBoard>,
     refreshed_at: DateTime<Utc>,
 ) -> RuntimeUsageSnapshot {
     let usage = UsageSnapshot {
@@ -240,7 +265,7 @@ fn build_claude_code_runtime_snapshot(
         seven_day_quota: None,
         monthly_quota: None,
         local: Some(local),
-        task_board: None,
+        task_board,
         messages: vec![],
     };
 
