@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use anyhow::Context;
 use chrono::Utc;
 use clap::Parser;
-use codexu_core::readers::{ClaudeCodeTranscriptReader, CodexStateReader, CodexTranscriptReader};
+use codexu_core::readers::{
+    ClaudeCodeTranscriptReader, CodexDashboardProvider, CodexStateReader, CodexTranscriptReader,
+};
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -33,6 +35,11 @@ struct Args {
     /// Only print summary, skip writing JSON
     #[arg(long)]
     summary: bool,
+
+    /// Dump the full Codex dashboard snapshot as pretty JSON to --output
+    /// (default codexu-probe.json). Takes precedence over the summary path.
+    #[arg(long)]
+    dump_json: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
@@ -64,6 +71,25 @@ async fn main() -> anyhow::Result<()> {
             info!("Codex data root: {}", codex_root.display());
             info!("Codex state DB: {}", state_db_path.display());
             info!("Cache directory: {}", cache_dir.display());
+
+            if args.dump_json {
+                let provider = CodexDashboardProvider::new(&codex_root, &cache_dir);
+                let now = Utc::now();
+                match provider.load_dashboard_snapshot(now).await {
+                    Ok(Some(snapshot)) => {
+                        let json = serde_json::to_string_pretty(&snapshot)?;
+                        tokio::fs::write(&args.output, json).await?;
+                        info!("Wrote dashboard JSON to {}", args.output.display());
+                    }
+                    Ok(None) => {
+                        warn!("No Codex usage data found at {}", codex_root.display());
+                    }
+                    Err(e) => {
+                        return Err(e).context("Failed to load Codex dashboard snapshot");
+                    }
+                }
+                return Ok(());
+            }
 
             let reader = CodexTranscriptReader::new(&cache_dir);
             let now = Utc::now();

@@ -4,7 +4,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::{Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tracing::{info, warn};
 
 mod app_state;
@@ -33,8 +34,13 @@ fn spawn_usage_auto_refresh(app: tauri::AppHandle, state: Arc<AppState>) {
             tokio::time::sleep(Duration::from_secs(interval_secs)).await;
 
             match state.refresh_usage().await {
-                Ok(_) => {
+                Ok(snapshot) => {
                     let _ = app.emit("usage:updated", ());
+                    let language = *state.runtime_language.read().await;
+                    let quota = snapshot.as_ref().map(codex_quota_snapshot_from_dashboard);
+                    if let Err(error) = tray::update_quota_menu(&app, language, quota.as_ref()) {
+                        warn!(error = %error, "Failed to update tray quota menu");
+                    }
                 }
                 Err(error) => {
                     warn!(error = %error, "Background usage auto-refresh failed");
@@ -42,6 +48,22 @@ fn spawn_usage_auto_refresh(app: tauri::AppHandle, state: Arc<AppState>) {
             }
         }
     });
+}
+
+/// Converts the official quota windows embedded in a dashboard snapshot into the
+/// shape the tray quota menu consumes.
+fn codex_quota_snapshot_from_dashboard(
+    dashboard: &codexu_core::models::CodexDashboardSnapshot,
+) -> codexu_core::readers::CodexAppServerQuotaSnapshot {
+    codexu_core::readers::CodexAppServerQuotaSnapshot {
+        account: Some(dashboard.codex.snapshot.account.clone()),
+        limit_id: Some(dashboard.codex.snapshot.limit_id.clone()),
+        limit_name: Some(dashboard.codex.snapshot.limit_name.clone()),
+        quota_read_succeeded: dashboard.codex.snapshot.quota_read_succeeded,
+        five_hour_quota: dashboard.codex.snapshot.five_hour_quota.clone(),
+        seven_day_quota: dashboard.codex.snapshot.seven_day_quota.clone(),
+        monthly_quota: dashboard.codex.snapshot.monthly_quota.clone(),
+    }
 }
 
 #[cfg(windows)]
@@ -130,6 +152,14 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            crate::tray::show_main_window(app);
+        }))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().map_err(|e| {
@@ -171,6 +201,12 @@ fn main() {
             }
 
             tray::setup_tray(app.handle(), initial_language)?;
+
+            register_global_shortcut(app.handle());
+            if let Err(error) = tray::update_quota_menu(app.handle(), initial_language, None) {
+                warn!(error = %error, "Failed to initialize tray quota menu");
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -181,10 +217,43 @@ fn main() {
             commands::settings::set_settings,
             commands::settings::open_settings_window,
             commands::settings::sync_runtime_language,
+            commands::settings::set_autostart,
+            commands::settings::get_autostart,
+            commands::settings::run_diagnostics,
+            commands::updates::check_for_updates,
             tray_show_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Registers the Ctrl+U global shortcut used to toggle the main window.
+/// Registration failures (e.g. the shortcut is already taken) are logged and
+/// ignored so the app keeps running.
+fn register_global_shortcut(app: &AppHandle) {
+    let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyU);
+    match app
+        .global_shortcut()
+        .on_shortcut(shortcut, |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                toggle_main_window(app);
+            }
+        }) {
+        Ok(_) => info!("Registered global shortcut Ctrl+U to toggle the main window"),
+        Err(error) => warn!(error = %error, "Failed to register global shortcut Ctrl+U"),
+    }
+}
+
+/// Shows and focuses the main window, or hides it when it is already visible.
+fn toggle_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
 }
 
 #[tauri::command]

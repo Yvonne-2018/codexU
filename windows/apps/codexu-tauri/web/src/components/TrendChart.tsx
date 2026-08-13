@@ -13,6 +13,7 @@ import { useI18n } from '../i18n/I18nProvider';
 
 interface TrendChartProps {
   trend: UsageTrend | null;
+  projectedMonthCostUsd?: number | null;
 }
 
 const RANGES = [
@@ -21,7 +22,7 @@ const RANGES = [
   { label: '180D', days: 180 },
 ];
 
-export function TrendChart({ trend }: TrendChartProps) {
+export function TrendChart({ trend, projectedMonthCostUsd }: TrendChartProps) {
   const { t } = useI18n();
   const [range, setRange] = useState(30);
 
@@ -83,6 +84,11 @@ export function TrendChart({ trend }: TrendChartProps) {
           <strong>{formatChange(trend.summary.change_percent, trend.summary.is_new_activity, t)}</strong>
         </div>
       </div>
+      {projectedMonthCostUsd != null && Number.isFinite(projectedMonthCostUsd) ? (
+        <p className="mt-2 text-xs text-secondary">
+          {t('usage.projectedMonthCost', { value: projectedMonthCostUsd.toFixed(2) })}
+        </p>
+      ) : null}
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>

@@ -1,4 +1,6 @@
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use std::sync::Mutex;
+
+use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
@@ -6,10 +8,10 @@ use crate::app_state::ResolvedLanguage;
 use crate::commands::usage::refresh_usage;
 
 struct TrayMenu {
-    open: MenuItem<tauri::Wry>,
-    settings: MenuItem<tauri::Wry>,
-    refresh: MenuItem<tauri::Wry>,
-    quit: MenuItem<tauri::Wry>,
+    open: Mutex<MenuItem<tauri::Wry>>,
+    settings: Mutex<MenuItem<tauri::Wry>>,
+    refresh: Mutex<MenuItem<tauri::Wry>>,
+    quit: Mutex<MenuItem<tauri::Wry>>,
 }
 
 struct TrayLabels {
@@ -33,13 +35,13 @@ pub fn setup_tray(app: &AppHandle, language: ResolvedLanguage) -> anyhow::Result
     )?;
 
     app.manage(TrayMenu {
-        open: open_i.clone(),
-        settings: settings_i.clone(),
-        refresh: refresh_i.clone(),
-        quit: quit_i.clone(),
+        open: Mutex::new(open_i.clone()),
+        settings: Mutex::new(settings_i.clone()),
+        refresh: Mutex::new(refresh_i.clone()),
+        quit: Mutex::new(quit_i.clone()),
     });
 
-    TrayIconBuilder::new()
+    TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().unwrap().clone())
         .tooltip("codexU")
         .menu(&menu)
@@ -75,13 +77,97 @@ pub fn setup_tray(app: &AppHandle, language: ResolvedLanguage) -> anyhow::Result
     Ok(())
 }
 
+/// Rebuilds the tray menu with disabled Codex quota lines inserted above the
+/// Open/Settings/Refresh items. The action items keep their fixed ids so the
+/// existing menu event handler keeps working after the menu is replaced.
+pub fn update_quota_menu(
+    app: &AppHandle,
+    language: ResolvedLanguage,
+    quota: Option<&codexu_core::readers::CodexAppServerQuotaSnapshot>,
+) -> anyhow::Result<()> {
+    let labels = labels_for(language);
+    let open_i = MenuItem::with_id(app, "open", labels.open, true, None::<&str>)?;
+    let settings_i = MenuItem::with_id(app, "settings", labels.settings, true, None::<&str>)?;
+    let refresh_i = MenuItem::with_id(app, "refresh", labels.refresh, true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let quit_i = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)?;
+
+    let mut quota_items: Vec<MenuItem<tauri::Wry>> = Vec::new();
+    let mut had_quota = false;
+    if let Some(quota) = quota {
+        if let Some(window) = &quota.five_hour_quota {
+            quota_items.push(MenuItem::with_id(
+                app,
+                "quota-5h",
+                quota_line(language, "5h", window.used_percent),
+                false,
+                None::<&str>,
+            )?);
+            had_quota = true;
+        }
+        if let Some(window) = &quota.seven_day_quota {
+            quota_items.push(MenuItem::with_id(
+                app,
+                "quota-7d",
+                quota_line(language, "7d", window.used_percent),
+                false,
+                None::<&str>,
+            )?);
+            had_quota = true;
+        }
+        if let Some(window) = &quota.monthly_quota {
+            quota_items.push(MenuItem::with_id(
+                app,
+                "quota-monthly",
+                quota_line(language, "monthly", window.used_percent),
+                false,
+                None::<&str>,
+            )?);
+            had_quota = true;
+        }
+    }
+    if !had_quota {
+        quota_items.push(MenuItem::with_id(
+            app,
+            "quota-unavailable",
+            quota_unavailable_label(language),
+            false,
+            None::<&str>,
+        )?);
+    }
+
+    let mut items: Vec<&dyn IsMenuItem<tauri::Wry>> = Vec::new();
+    for item in &quota_items {
+        items.push(item);
+    }
+    items.push(&open_i);
+    items.push(&settings_i);
+    items.push(&refresh_i);
+    items.push(&separator);
+    items.push(&quit_i);
+
+    let menu = Menu::with_items(app, &items)?;
+
+    if let Some(state) = app.try_state::<TrayMenu>() {
+        *state.open.lock().unwrap() = open_i;
+        *state.settings.lock().unwrap() = settings_i;
+        *state.refresh.lock().unwrap() = refresh_i;
+        *state.quit.lock().unwrap() = quit_i;
+    }
+    if let Some(tray) = app.tray_by_id("main") {
+        tray.set_menu(Some(menu))?;
+    }
+
+    Ok(())
+}
+
 pub fn update_labels(app: &AppHandle, language: ResolvedLanguage) {
     let labels = labels_for(language);
     if let Some(menu) = app.try_state::<TrayMenu>() {
-        let _ = menu.open.set_text(labels.open);
-        let _ = menu.settings.set_text(labels.settings);
-        let _ = menu.refresh.set_text(labels.refresh);
-        let _ = menu.quit.set_text(labels.quit);
+        let _ = menu.open.lock().unwrap().set_text(labels.open);
+        let _ = menu.settings.lock().unwrap().set_text(labels.settings);
+        let _ = menu.refresh.lock().unwrap().set_text(labels.refresh);
+        let _ = menu.quit.lock().unwrap().set_text(labels.quit);
     }
 }
 
@@ -100,6 +186,22 @@ fn labels_for(language: ResolvedLanguage) -> TrayLabels {
             quit: "Quit",
         },
     }
+}
+
+fn quota_unavailable_label(language: ResolvedLanguage) -> &'static str {
+    match language {
+        ResolvedLanguage::ZhHans => "额度: --",
+        ResolvedLanguage::En => "Quota: --",
+    }
+}
+
+fn quota_line(language: ResolvedLanguage, key: &str, used_percent: f64) -> String {
+    let label = match (language, key) {
+        (ResolvedLanguage::ZhHans, "monthly") => "月度",
+        (ResolvedLanguage::En, "monthly") => "Monthly",
+        (_, other) => other,
+    };
+    format!("{}: {:.0}%", label, used_percent)
 }
 
 pub fn show_main_window(app: &AppHandle) {

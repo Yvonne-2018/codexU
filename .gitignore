@@ -36,3 +36,4 @@ explore/
 
 # Private local visual-acceptance artifacts (screenshots, logs, and capture helpers)
 /.local-artifacts/
+.claude/

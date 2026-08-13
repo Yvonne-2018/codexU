@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { FolderOpen, Palette, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  ExternalLink,
+  FolderOpen,
+  Loader2,
+  Palette,
+  Power,
+  RefreshCw,
+  Rocket,
+  Stethoscope,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useSettings } from '../hooks/useSettings';
 import type { InterfaceLanguage, ThemeMode, TrayDensity } from '../types/settings';
@@ -13,11 +25,55 @@ import {
 } from '../utils/paletteCatalog';
 import { useI18n } from '../i18n/I18nProvider';
 
+interface DiagnosticsResult {
+  codex_root: string;
+  codex_root_exists: boolean;
+  state_db_exists: boolean;
+  claude_projects_exists: boolean;
+  claude_tasks_exists: boolean;
+  codex_executable: boolean;
+  codex_quota_read_succeeded: boolean;
+  messages: string[];
+}
+
+interface UpdateCheckResult {
+  current_version: string | null;
+  latest_version: string | null;
+  release_url: string | null;
+  checked_at: number | null;
+  error: string | null;
+}
+
 export function Settings() {
   const canInvokeTauri = isTauriRuntimeAvailable();
   const { settings, update, error } = useSettings();
   const { t, language, preference, setPreference } = useI18n();
   const [saved, setSaved] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
+  const [updateCheck, setUpdateCheck] = useState<UpdateCheckResult | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [autostart, setAutostart] = useState<boolean | null>(null);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canInvokeTauri) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        requireTauriRuntime();
+        const value = await invoke<boolean>('get_autostart');
+        if (!cancelled) setAutostart(value);
+      } catch (e) {
+        if (!cancelled) setAutostartError(String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canInvokeTauri]);
 
   useEffect(() => {
     applyAppTheme(
@@ -156,6 +212,49 @@ export function Settings() {
       flashSaved();
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const runDiagnostics = async () => {
+    if (!canInvokeTauri) return;
+    setDiagnosticsRunning(true);
+    setDiagnosticsError(null);
+    try {
+      requireTauriRuntime();
+      const result = await invoke<DiagnosticsResult>('run_diagnostics');
+      setDiagnostics(result);
+    } catch (e) {
+      setDiagnosticsError(String(e));
+    } finally {
+      setDiagnosticsRunning(false);
+    }
+  };
+
+  const checkUpdates = async () => {
+    if (!canInvokeTauri) return;
+    setUpdateChecking(true);
+    setUpdateError(null);
+    try {
+      requireTauriRuntime();
+      const result = await invoke<UpdateCheckResult>('check_for_updates');
+      setUpdateCheck(result);
+    } catch (e) {
+      setUpdateError(String(e));
+    } finally {
+      setUpdateChecking(false);
+    }
+  };
+
+  const toggleAutostart = async () => {
+    if (!canInvokeTauri || autostart == null) return;
+    const next = !autostart;
+    setAutostartError(null);
+    try {
+      requireTauriRuntime();
+      await invoke('set_autostart', { enabled: next });
+      setAutostart(next);
+    } catch (e) {
+      setAutostartError(String(e));
     }
   };
 
@@ -309,6 +408,82 @@ export function Settings() {
             </div>
           </Section>
 
+          <Section title={t('settings.diagnostics')}>
+            <p className="text-xs text-tertiary mb-3">{t('settings.diagnosticsHint')}</p>
+            <button
+              onClick={runDiagnostics}
+              disabled={!canInvokeTauri || diagnosticsRunning}
+              className="flex items-center gap-2 px-4 py-2 rounded-full glass-button-solid text-sm"
+            >
+              {diagnosticsRunning ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Stethoscope size={14} aria-hidden="true" />
+              )}
+              {t('settings.runDiagnostics')}
+            </button>
+            {diagnosticsError ? (
+              <p className="mt-3 text-xs text-status-error">
+                {t('settings.diagFailed', { error: diagnosticsError })}
+              </p>
+            ) : null}
+            {diagnostics ? <DiagnosticsResultView result={diagnostics} t={t} /> : null}
+          </Section>
+
+          <Section title={t('settings.updates')}>
+            <button
+              onClick={checkUpdates}
+              disabled={!canInvokeTauri || updateChecking}
+              className="flex items-center gap-2 px-4 py-2 rounded-full glass-button-solid text-sm"
+            >
+              {updateChecking ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Rocket size={14} aria-hidden="true" />
+              )}
+              {t('settings.checkUpdates')}
+            </button>
+            {updateError ? (
+              <p className="mt-3 text-xs text-status-error">
+                {t('settings.updateFailed', { error: updateError })}
+              </p>
+            ) : null}
+            {updateCheck ? <UpdateCheckView result={updateCheck} t={t} /> : null}
+          </Section>
+
+          <Section title={t('settings.launchAtStartup')}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2 min-w-0">
+                <Power size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-secondary" />
+                <div className="min-w-0">
+                  <p className="text-sm text-secondary">{t('settings.launchAtStartup')}</p>
+                  <p className="text-xs text-tertiary mt-0.5">{t('settings.launchAtStartupDetail')}</p>
+                </div>
+              </div>
+              <button
+                role="switch"
+                aria-checked={autostart === true}
+                aria-label={t('settings.launchAtStartup')}
+                disabled={!canInvokeTauri || autostart == null}
+                onClick={toggleAutostart}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                  autostart === true ? 'bg-data-primary' : 'bg-surface-inset'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    autostart === true ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            {autostartError ? (
+              <p className="mt-3 text-xs text-status-error">
+                {t('settings.autostartFailed', { error: autostartError })}
+              </p>
+            ) : null}
+          </Section>
+
           <Section title={t('settings.about')}>
             <p className="text-sm text-secondary">{t('settings.version')}</p>
             <p className="text-xs text-tertiary mt-2">{t('settings.dataFolder', { path: settings.app_data_dir })}</p>
@@ -362,6 +537,104 @@ function PathField({
           <FolderOpen size={16} />
         </button>
       </div>
+    </div>
+  );
+}
+
+function DiagnosticsResultView({
+  result,
+  t,
+}: {
+  result: DiagnosticsResult;
+  t: ReturnType<typeof useI18n>['t'];
+}) {
+  const checks = [
+    { label: t('settings.diagCodexRoot'), ok: result.codex_root_exists, detail: result.codex_root },
+    { label: t('settings.diagStateDbExists'), ok: result.state_db_exists },
+    { label: t('settings.diagClaudeProjectsExists'), ok: result.claude_projects_exists },
+    { label: t('settings.diagClaudeTasksExists'), ok: result.claude_tasks_exists },
+    { label: t('settings.diagCodexExecutable'), ok: result.codex_executable },
+    { label: t('settings.diagCodexQuotaRead'), ok: result.codex_quota_read_succeeded },
+  ];
+
+  return (
+    <div className="mt-4">
+      <div className="space-y-2">
+        {checks.map((check) => (
+          <div key={check.label} className="flex items-center justify-between gap-3 text-sm">
+            <span className="flex min-w-0 items-center gap-2">
+              {check.ok ? (
+                <CheckCircle2 size={14} aria-hidden="true" className="shrink-0 text-status-ok" />
+              ) : (
+                <XCircle size={14} aria-hidden="true" className="shrink-0 text-status-error" />
+              )}
+              <span className="truncate text-secondary">{check.label}</span>
+            </span>
+            {check.detail ? (
+              <span className="max-w-[55%] truncate text-xs text-tertiary" title={check.detail}>
+                {check.detail}
+              </span>
+            ) : (
+              <span className="shrink-0 text-xs text-tertiary">
+                {check.ok ? t('settings.diagOk') : t('settings.diagMissing')}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      {result.messages.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-xs text-tertiary">
+          {result.messages.map((message, index) => (
+            <li key={index}>{message}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function UpdateCheckView({
+  result,
+  t,
+}: {
+  result: UpdateCheckResult;
+  t: ReturnType<typeof useI18n>['t'];
+}) {
+  if (result.error) {
+    return <p className="mt-3 text-xs text-status-error">{result.error}</p>;
+  }
+
+  const hasNewVersion =
+    result.latest_version != null &&
+    result.current_version != null &&
+    result.latest_version !== result.current_version;
+
+  return (
+    <div className="mt-4 space-y-1.5">
+      {result.checked_at ? (
+        <p className="text-xs text-tertiary">
+          {t('settings.checkedAt', { time: new Date(result.checked_at).toLocaleString() })}
+        </p>
+      ) : null}
+      {hasNewVersion ? (
+        <>
+          <p className="text-xs text-secondary">
+            {t('settings.currentVersion', { value: result.current_version ?? t('common.unknown') })} ·{' '}
+            {t('settings.latestVersion', { value: result.latest_version ?? t('common.unknown') })}
+          </p>
+          <a
+            href={result.release_url ?? '#'}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-accent"
+          >
+            {t('settings.openRelease')}
+            <ExternalLink size={13} aria-hidden="true" />
+          </a>
+        </>
+      ) : (
+        <p className="text-sm text-secondary">{t('settings.upToDate')}</p>
+      )}
     </div>
   );
 }

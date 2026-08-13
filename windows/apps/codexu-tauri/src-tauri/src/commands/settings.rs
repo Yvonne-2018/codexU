@@ -142,6 +142,168 @@ fn settings_window_title(language: ResolvedLanguage) -> &'static str {
     }
 }
 
+#[tauri::command]
+pub async fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let autostart = app.autolaunch();
+    if enabled {
+        autostart
+            .enable()
+            .map_err(|e| format!("Failed to enable autostart: {}", e))
+    } else {
+        autostart
+            .disable()
+            .map_err(|e| format!("Failed to disable autostart: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn get_autostart(app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|e| format!("Failed to read autostart state: {}", e))
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct DiagnosticsReport {
+    pub codex_root: String,
+    pub codex_root_exists: bool,
+    pub state_db_exists: bool,
+    pub claude_projects_exists: bool,
+    pub claude_tasks_exists: bool,
+    pub codex_executable: Option<String>,
+    pub codex_quota_read_succeeded: bool,
+    pub messages: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn run_diagnostics(
+    state: State<'_, std::sync::Arc<AppState>>,
+) -> Result<DiagnosticsReport, String> {
+    let codex_root = {
+        let config = state.config.read().await;
+        config.codex_root.clone()
+    };
+
+    let mut messages = Vec::new();
+
+    let codex_root_exists = codex_root.is_dir();
+    if !codex_root_exists {
+        messages.push(format!(
+            "Codex root does not exist: {}",
+            codex_root.display()
+        ));
+    }
+
+    let state_db_path = codex_root.join("state_5.sqlite");
+    let state_db_exists = state_db_path.is_file();
+    if !state_db_exists {
+        messages.push(format!(
+            "Codex state DB not found: {}",
+            state_db_path.display()
+        ));
+    }
+
+    let home = dirs::home_dir();
+    let claude_projects_exists = home
+        .as_ref()
+        .map(|home| home.join(".claude").join("projects").is_dir())
+        .unwrap_or(false);
+    if !claude_projects_exists {
+        messages.push("Claude Code projects directory not found (~/.claude/projects)".to_string());
+    }
+
+    let claude_tasks_exists = home
+        .as_ref()
+        .map(|home| home.join(".claude").join("tasks").is_dir())
+        .unwrap_or(false);
+    if !claude_tasks_exists {
+        messages.push("Claude Code tasks directory not found (~/.claude/tasks)".to_string());
+    }
+
+    let codex_executable = find_codex_executable().map(|path| path.display().to_string());
+    if codex_executable.is_none() {
+        messages.push("Could not locate the installed Codex CLI executable".to_string());
+    }
+
+    let codex_quota_read_succeeded = codexu_core::readers::read_installed_codex_quota()
+        .await
+        .map(|quota| quota.quota_read_succeeded)
+        .unwrap_or(false);
+    if !codex_quota_read_succeeded {
+        messages.push("Could not read official Codex quota from the local app-server".to_string());
+    }
+
+    Ok(DiagnosticsReport {
+        codex_root: codex_root.display().to_string(),
+        codex_root_exists,
+        state_db_exists,
+        claude_projects_exists,
+        claude_tasks_exists,
+        codex_executable,
+        codex_quota_read_succeeded,
+        messages,
+    })
+}
+
+/// Mirrors the Codex CLI candidate paths used by codexu-core so the diagnostic
+/// report can expose the resolved executable path without coupling to its
+/// private resolver.
+fn find_codex_executable() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Some(user_profile) = std::env::var_os("USERPROFILE") {
+        let user_dir = PathBuf::from(user_profile);
+        candidates.push(
+            user_dir
+                .join(".codex")
+                .join(".sandbox-bin")
+                .join("codex.exe"),
+        );
+        candidates.push(user_dir.join(".local").join("bin").join("codex.exe"));
+    }
+
+    if let Some(app_data) = std::env::var_os("APPDATA") {
+        let triple = if cfg!(target_arch = "aarch64") {
+            "aarch64-pc-windows-msvc"
+        } else {
+            "x86_64-pc-windows-msvc"
+        };
+        candidates.push(
+            PathBuf::from(app_data)
+                .join("npm")
+                .join("node_modules")
+                .join("@openai")
+                .join("codex")
+                .join("node_modules")
+                .join("@openai")
+                .join("codex-win32-x64")
+                .join("vendor")
+                .join(triple)
+                .join("bin")
+                .join("codex.exe"),
+        );
+    }
+
+    if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+        candidates.push(
+            PathBuf::from(local_app_data)
+                .join("Programs")
+                .join("codex")
+                .join("codex.exe"),
+        );
+    }
+
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            candidates.push(dir.join("codex.exe"));
+        }
+    }
+
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
 fn apply_theme(app: &AppHandle, theme: ThemeMode) {
     let windows = app.webview_windows();
     let dark = match theme {

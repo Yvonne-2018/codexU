@@ -6,9 +6,9 @@ use chrono::{DateTime, Utc};
 
 use crate::models::*;
 use crate::readers::{
-    build_leadership_snapshot, ClaudeCodeTranscriptReader, ClaudeTaskBoardReader,
-    CodexAppServerQuotaSnapshot, CodexStateReader, CodexTaskBoardReader, CodexThreadMetadata,
-    CodexTranscriptReader,
+    build_leadership_snapshot, merge_live_tasks, ClaudeCodeTranscriptReader, ClaudeTaskBoardReader,
+    CodexAppServerQuotaSnapshot, CodexLiveTaskReader, CodexStateReader, CodexTaskBoardReader,
+    CodexThreadMetadata, CodexTranscriptReader,
 };
 
 /// Default leadership period for dashboard visibility.
@@ -147,6 +147,23 @@ impl CodexDashboardProvider {
             .load(now)
             .await
             .unwrap_or(None);
+
+        // Surface live Codex task state from the app-server when available;
+        // any failure falls back to the static board.
+        let task_board = match task_board {
+            Some(board) => {
+                let live = CodexLiveTaskReader::new(&self.codex_root)
+                    .load(now)
+                    .await
+                    .ok()
+                    .flatten();
+                match live {
+                    Some(snapshot) => Some(merge_live_tasks(&board, &snapshot, now)),
+                    None => Some(board),
+                }
+            }
+            None => None,
+        };
 
         let claude_code = self.load_claude_code_snapshot(now).await;
 

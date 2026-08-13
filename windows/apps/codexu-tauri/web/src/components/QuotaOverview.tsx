@@ -56,6 +56,8 @@ export function QuotaOverview({ snapshot, sourceLabel, onRefresh }: QuotaOvervie
   ].filter((entry): entry is { label: string; window: RateWindow } => entry.window != null);
   const hasAuthoritativeEmptyQuota = snapshot?.quota_read_succeeded === true;
   const hasQuota = quotaWindows.length > 0;
+  const planLabel = snapshot?.account?.plan_type ? t('quota.plan', { value: snapshot.account.plan_type }) : null;
+  const limitLabel = snapshot?.limit_name ? t('quota.limit', { value: snapshot.limit_name }) : null;
 
   return (
     <section className="dashboard-home-quota dashboard-home-primary-card glass-panel p-4" aria-label={t('quota.availability')} aria-live="polite">
@@ -67,6 +69,11 @@ export function QuotaOverview({ snapshot, sourceLabel, onRefresh }: QuotaOvervie
           <div>
             <h3>{t('quota.title')}</h3>
             <p>{sourceLabel ?? t('quota.officialSource')}</p>
+            {planLabel || limitLabel ? (
+              <p className="mt-0.5 text-[11px] text-tertiary">
+                {[planLabel, limitLabel].filter(Boolean).join(' · ')}
+              </p>
+            ) : null}
           </div>
         </div>
         <span className={`dashboard-overview-status ${hasQuota ? 'dashboard-overview-status-confirmed' : ''}`}>

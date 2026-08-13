@@ -112,6 +112,24 @@ export interface UsageTrend {
   source_quality: 'detailed' | 'approximate';
 }
 
+export interface InferenceModelStats {
+  model: string | null;
+  effort: string | null;
+  call_count: number;
+  total_duration_ms: number;
+  average_duration_ms: number;
+  p50_duration_ms: number;
+  p90_duration_ms: number;
+  total_output_tokens: number;
+  average_tokens_per_second: number;
+  reasoning_output_ratio: number;
+}
+
+export interface InferencePerformance {
+  refreshed_at: number | null;
+  models: InferenceModelStats[];
+}
+
 export interface TaskItem {
   id: string;
   code: string;
@@ -240,6 +258,7 @@ export interface LocalUsage {
   project_board: ProjectBoard | null;
   tool_usages: ToolUsage[];
   skill_usages: SkillUsage[];
+  inference_performance: InferencePerformance | null;
 }
 
 export interface RateWindow {
