@@ -6,6 +6,7 @@ pub mod codex_task_board;
 pub mod codex_transcript;
 pub mod common;
 pub mod leadership;
+pub mod live_task;
 
 pub use claude_transcript::ClaudeCodeTranscriptReader;
 pub use codex_app_server::{read_installed_codex_quota, CodexAppServerQuotaSnapshot};
@@ -17,3 +18,7 @@ pub use codex_task_board::CodexTaskBoardReader;
 pub use codex_transcript::CodexTranscriptReader;
 pub use common::*;
 pub use leadership::*;
+pub use live_task::{
+    merge_live_tasks, parse_thread_list_response, CodexLiveTaskReader, LiveTaskRecord,
+    LiveTaskSnapshot,
+};
