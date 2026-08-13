@@ -404,10 +404,66 @@ fn claude_date_value(value: Option<&serde_json::Value>) -> Option<DateTime<Utc>>
     })
 }
 
+/// Aggregates skill load events across Claude transcripts into `SkillUsage`,
+/// mirroring the Codex provider's `make_skill_usages`.
+fn make_claude_skill_usages(summaries: &[ClaudeTranscriptSummary]) -> Vec<SkillUsage> {
+    struct Accumulator {
+        load_count: i64,
+        thread_ids: HashSet<String>,
+        last_loaded_at: Option<DateTime<Utc>>,
+    }
+
+    let mut accumulated: HashMap<String, Accumulator> = HashMap::new();
+    for summary in summaries {
+        for load in &summary.skill_loads {
+            let accumulator = accumulated
+                .entry(load.name.clone())
+                .or_insert_with(|| Accumulator {
+                    load_count: 0,
+                    thread_ids: HashSet::new(),
+                    last_loaded_at: None,
+                });
+            accumulator.load_count += 1;
+            accumulator.thread_ids.insert(summary.session_id.clone());
+            if let Some(date) = load.date {
+                if accumulator
+                    .last_loaded_at
+                    .map(|last| date > last)
+                    .unwrap_or(true)
+                {
+                    accumulator.last_loaded_at = Some(date);
+                }
+            }
+        }
+    }
+
+    let source_label = "Claude Code skill".to_string();
+    let id_prefix = source_label.to_ascii_lowercase().replace(' ', "-");
+    let mut usages: Vec<SkillUsage> = accumulated
+        .into_iter()
+        .map(|(name, accumulator)| SkillUsage {
+            id: format!("{}:{}", id_prefix, name),
+            name,
+            source_label: source_label.clone(),
+            load_count: accumulator.load_count,
+            thread_count: accumulator.thread_ids.len() as i64,
+            last_loaded_at: accumulator.last_loaded_at,
+        })
+        .collect();
+    usages.sort_by(|left, right| {
+        right
+            .load_count
+            .cmp(&left.load_count)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    usages
+}
+
 fn make_local_usage_from_claude(
     summaries: Vec<ClaudeTranscriptSummary>,
     now: DateTime<Utc>,
 ) -> Option<LocalUsage> {
+    let skill_usages = make_claude_skill_usages(&summaries);
     let common_summaries: Vec<SessionSummary> = summaries
         .into_iter()
         .map(|s| SessionSummary {
@@ -439,5 +495,7 @@ fn make_local_usage_from_claude(
             git_origin_url: None,
         })
         .collect();
-    make_local_usage(common_summaries, now)
+    let mut usage = make_local_usage(common_summaries, now)?;
+    usage.skill_usages = skill_usages;
+    Some(usage)
 }

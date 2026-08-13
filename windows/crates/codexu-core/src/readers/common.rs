@@ -202,7 +202,9 @@ pub fn make_local_usage(summaries: Vec<SessionSummary>, now: DateTime<Utc>) -> O
     }
 
     let daily_buckets = make_seven_day_buckets(&daily_usage, now);
-    let usage_trend = make_usage_trend(&daily_usage, &seven_day, &previous_seven_day, &month, now);
+    let mut usage_trend =
+        make_usage_trend(&daily_usage, &seven_day, &previous_seven_day, &month, now);
+    usage_trend.model_trends = make_model_trends(&unique_deltas, now);
 
     let detailed = DetailedUsage {
         today: today.clone(),
@@ -373,6 +375,123 @@ fn make_usage_trend(
         active_day_count,
         source_quality: UsageSourceQuality::Detailed,
     }
+}
+
+/// Builds per-model 180-day token trends from the unique usage deltas.
+///
+/// Deltas without a model are grouped under `unknown`. Trends are ranked by
+/// total tokens (descending) and capped at eight to keep the dashboard
+/// readable, mirroring the macOS provider's top-eight behavior. Returns `None`
+/// when no model has any token activity.
+fn make_model_trends(deltas: &[UsageDelta], now: DateTime<Utc>) -> Option<Vec<ModelUsageTrend>> {
+    let start = Utc
+        .with_ymd_and_hms(now.year(), now.month(), now.day(), 0, 0, 0)
+        .unwrap()
+        - chrono::Duration::days(179);
+
+    let mut by_model: HashMap<String, Vec<UsageDelta>> = HashMap::new();
+    for delta in deltas {
+        let key = delta.model.as_deref().unwrap_or("unknown").to_string();
+        by_model.entry(key).or_default().push(delta.clone());
+    }
+
+    let mut ranked: Vec<(i64, ModelUsageTrend)> = Vec::new();
+    for (model_name, model_deltas) in by_model {
+        let mut daily_usage: HashMap<String, (DateTime<Utc>, PricedTokenUsage)> = HashMap::new();
+        for delta in &model_deltas {
+            let cost = estimated_cost_usd(&delta.tokens, delta.model.as_deref());
+            let bucket_date = Utc
+                .with_ymd_and_hms(
+                    delta.date.year(),
+                    delta.date.month(),
+                    delta.date.day(),
+                    0,
+                    0,
+                    0,
+                )
+                .unwrap();
+            let key = bucket_date.format("%Y-%m-%d").to_string();
+            let entry = daily_usage
+                .entry(key)
+                .or_insert_with(|| (bucket_date, PricedTokenUsage::ZERO));
+            entry.1.add_tokens(&delta.tokens, cost);
+        }
+
+        let mut buckets = Vec::new();
+        for offset in 0..180 {
+            let date = start + chrono::Duration::days(offset);
+            let date = Utc
+                .with_ymd_and_hms(date.year(), date.month(), date.day(), 0, 0, 0)
+                .unwrap();
+            let key = date.format("%Y-%m-%d").to_string();
+            let usage = daily_usage
+                .get(&key)
+                .map(|(_, u)| u.clone())
+                .unwrap_or_default();
+            buckets.push(UsageDayBucket {
+                id: key,
+                date,
+                usage,
+                source_quality: UsageSourceQuality::Detailed,
+            });
+        }
+
+        let active_buckets: Vec<UsageDayBucket> =
+            buckets.iter().filter(|b| b.tokens() > 0).cloned().collect();
+        if active_buckets.is_empty() {
+            continue;
+        }
+        let peak_day = active_buckets.iter().max_by_key(|b| b.tokens()).cloned();
+
+        let seven_day = sum_buckets(buckets.iter().rev().take(7));
+        let previous_seven_day = sum_buckets(buckets.iter().rev().skip(7).take(7));
+        let current_tokens = seven_day.tokens.visible_total_tokens();
+        let previous_tokens = previous_seven_day.tokens.visible_total_tokens();
+        let change_percent = if previous_tokens > 0 {
+            Some(((current_tokens - previous_tokens) as f64 / previous_tokens as f64) * 100.0)
+        } else {
+            None
+        };
+
+        let summary = UsageTrendSummary {
+            seven_day,
+            daily_average_tokens: current_tokens / 7,
+            peak_day,
+            change_percent,
+            is_new_activity: previous_tokens == 0 && current_tokens > 0,
+        };
+
+        let total_tokens: i64 = daily_usage
+            .values()
+            .map(|(_, u)| u.tokens.visible_total_tokens())
+            .sum();
+        ranked.push((
+            total_tokens,
+            ModelUsageTrend {
+                id: model_name.clone(),
+                model: Some(model_name.clone()),
+                day_buckets: buckets,
+                summary,
+                active_day_count: active_buckets.len() as i64,
+            },
+        ));
+    }
+
+    ranked.sort_by(|a, b| b.0.cmp(&a.0));
+    ranked.truncate(8);
+    if ranked.is_empty() {
+        None
+    } else {
+        Some(ranked.into_iter().map(|(_, trend)| trend).collect())
+    }
+}
+
+fn sum_buckets<'a>(buckets: impl Iterator<Item = &'a UsageDayBucket>) -> PricedTokenUsage {
+    let mut usage = PricedTokenUsage::ZERO;
+    for bucket in buckets {
+        usage.add_tokens(&bucket.usage.tokens, bucket.usage.estimated_cost_usd);
+    }
+    usage
 }
 
 fn make_heatmap_thresholds(tokens: Vec<i64>) -> Vec<i64> {
@@ -587,5 +706,45 @@ impl ProjectAccumulator {
 impl UsageDayBucket {
     fn tokens(&self) -> i64 {
         self.usage.tokens.visible_total_tokens()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{TimeZone, Utc};
+
+    use super::*;
+
+    fn delta_on(date: DateTime<Utc>, model: Option<&str>, total: i64) -> UsageDelta {
+        UsageDelta {
+            message_id: Some(format!("msg-{}", date.timestamp())),
+            date,
+            tokens: TokenBreakdown {
+                input_tokens: total,
+                cached_input_tokens: 0,
+                output_tokens: 0,
+                reasoning_output_tokens: 0,
+                total_tokens: total,
+            },
+            model: model.map(|m| m.to_string()),
+            project_path: "C:\\Projects\\Demo".to_string(),
+            session_id: "session-1".to_string(),
+        }
+    }
+
+    #[test]
+    fn make_model_trends_is_none_without_token_deltas() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap();
+        assert!(make_model_trends(&[], now).is_none());
+    }
+
+    #[test]
+    fn make_model_trends_groups_missing_models_as_unknown() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap();
+        let trends = make_model_trends(&[delta_on(now, None, 100)], now).expect("one model trend");
+        assert_eq!(trends.len(), 1);
+        assert_eq!(trends[0].model.as_deref(), Some("unknown"));
+        assert_eq!(trends[0].summary.seven_day.tokens.total_tokens, 100);
+        assert_eq!(trends[0].active_day_count, 1);
     }
 }
