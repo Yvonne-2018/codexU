@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-08-13
+
+- Windows 版补齐 macOS 已具备的看板数据面：任务看板新增 Codex 实时任务状态（app-server thread/list 轮询合并 running/idle/failed 线程）与 Claude Code 任务（`~/.claude/tasks`）读取。
+- 新增本机推理性能监测：从 Codex transcripts 重建模型调用边界，按模型与推理强度展示平均耗时、P50、P90、有效吞吐与 reasoning token 占比；缓存版本升级以触发旧用户重新解析。
+- Claude Code skill 用量聚合与按模型 token 趋势：用量标签页新增 7 天 token 柱状图、最近线程、推理时长与模型趋势卡片，并展示月度外推成本与配额账号/套餐元信息。
+- 系统集成：全局快捷键 Ctrl+U 切换主窗口、单实例锁、开机自启开关、托盘动态 Codex 额度菜单、GitHub 更新检查与设置内诊断面板、CLI `--dump-json` 完整快照导出。
+- 保持本地优先与隐私边界：所有聚合均在本机完成，不新增遥测，不上传 usage、线程、路径、日志或账户数据。
+
 ## 1.3.0 - 2026-08-04
 
 - 新增本机推理性能监测：从最近 28 天 Codex rollout 识别完整模型调用，按模型与推理强度展示平均耗时、P50、P90、有效吞吐和 reasoning token 占比，并支持今日、7 日均和 28 日均视图。
