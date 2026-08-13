@@ -35,9 +35,10 @@ use serde::{Deserialize, Serialize};
 
 use super::codex_state::CodexThreadMetadata;
 use super::common::*;
+use super::model_inference::make_inference_performance;
 use crate::models::*;
 
-const CODEX_CACHE_VERSION: i32 = 3;
+const CODEX_CACHE_VERSION: i32 = 4;
 
 /// On-disk cache for Codex transcript summaries.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -78,6 +79,10 @@ pub struct CodexTranscriptSummary {
     pub skill_loads: Vec<CodexSkillLoad>,
     #[serde(default)]
     pub task_intervals: Vec<CodexTaskInterval>,
+    /// Per-turn inference call samples rebuilt from task durations, turn
+    /// context (model/effort), and token-count events.
+    #[serde(default)]
+    pub inference_calls: Vec<InferenceCallSample>,
 }
 
 /// A privacy-preserving local skill-read observation.
@@ -150,9 +155,11 @@ impl CodexTranscriptReader {
         let summaries = self.load_local_summaries_internal(data_root).await?;
         Ok(summaries.and_then(|summaries| {
             let skill_usages = make_skill_usages(&summaries);
+            let inference_performance = make_inference_performance(&summaries, now);
             let sessions = combine_session_metadata(summaries, metadata);
             let mut usage = make_local_usage(sessions, now)?;
             usage.skill_usages = skill_usages;
+            usage.inference_performance = inference_performance;
             Some(usage)
         }))
     }
@@ -339,6 +346,7 @@ async fn parse_transcript(
         tool_calls: HashMap::new(),
         skill_loads: Vec::new(),
         task_intervals: Vec::new(),
+        inference_calls: Vec::new(),
     };
 
     let data = match tokio::fs::read(file).await {
@@ -351,6 +359,10 @@ async fn parse_transcript(
     // Track the most recently observed model per turn so token_count events can
     // inherit it even if the turn_context appeared earlier in the file.
     let mut turn_models: HashMap<String, String> = HashMap::new();
+    // Explicit `task_complete` durations and `turn_context` effort hints, used
+    // to rebuild per-turn inference call samples after the parse loop.
+    let mut turn_durations: HashMap<String, i64> = HashMap::new();
+    let mut turn_efforts: HashMap<String, String> = HashMap::new();
 
     for line in data.split(|b| *b == b'\n') {
         if line.is_empty() || line.len() > MAX_LINE_BYTES {
@@ -391,7 +403,12 @@ async fn parse_transcript(
             }
             if let Some(turn_id) = codex_string_value(payload.get("turn_id")) {
                 if let Some(ref m) = summary.model {
-                    turn_models.insert(turn_id, m.clone());
+                    turn_models.insert(turn_id.clone(), m.clone());
+                }
+                if let Some(effort) = codex_string_value(payload.get("effort"))
+                    .or_else(|| codex_string_value(payload.get("reasoning_effort")))
+                {
+                    turn_efforts.insert(turn_id.clone(), effort);
                 }
             }
         }
@@ -442,6 +459,13 @@ async fn parse_transcript(
                     Some(t) => t,
                     None => continue,
                 };
+                if let Some(ref turn) = turn_id {
+                    if let Some(duration_ms) = codex_f64_value(payload.get("duration_ms")) {
+                        if duration_ms.is_finite() && duration_ms > 0.0 {
+                            turn_durations.insert(turn.clone(), duration_ms.trunc() as i64);
+                        }
+                    }
+                }
                 if let Some(ref turn) = turn_id {
                     if let Some(started_at) = started_tasks.remove(turn) {
                         summary.task_intervals.push(CodexTaskInterval {
@@ -518,7 +542,96 @@ async fn parse_transcript(
         });
     }
 
+    build_inference_samples(&mut summary, &turn_models, &turn_efforts, &turn_durations);
+
     summary
+}
+
+/// Rebuilds one `InferenceCallSample` per model turn from the parsed deltas,
+/// durations, and efforts. Deltas with an explicit `task_complete` duration
+/// prefer it; otherwise the corresponding `task_interval` is used. Turns with
+/// only an interval (no token event) produce zero-token samples; turns with a
+/// delta but no duration at all are skipped rather than estimated.
+fn build_inference_samples(
+    summary: &mut CodexTranscriptSummary,
+    turn_models: &HashMap<String, String>,
+    turn_efforts: &HashMap<String, String>,
+    turn_durations: &HashMap<String, i64>,
+) {
+    // Keep the most recent token event per turn (deltas are deduplicated by
+    // turn_id during parsing, so this is normally a single entry).
+    let mut latest_deltas: HashMap<String, &CodexUsageDelta> = HashMap::new();
+    for delta in &summary.deltas {
+        if let Some(turn_id) = &delta.turn_id {
+            let entry = latest_deltas.entry(turn_id.clone()).or_insert(delta);
+            if delta.date > entry.date {
+                *entry = delta;
+            }
+        }
+    }
+
+    for (turn_id, delta) in &latest_deltas {
+        let duration_ms = turn_durations
+            .get(turn_id)
+            .copied()
+            .or_else(|| interval_duration_ms(&summary.task_intervals, Some(turn_id)));
+        let Some(duration_ms) = duration_ms else {
+            continue;
+        };
+        summary.inference_calls.push(InferenceCallSample {
+            turn_id: Some(turn_id.clone()),
+            model: delta
+                .model
+                .clone()
+                .or_else(|| turn_models.get(turn_id).cloned()),
+            effort: turn_efforts.get(turn_id).cloned(),
+            duration_ms,
+            output_tokens: delta.tokens.output_tokens,
+            reasoning_output_tokens: delta.tokens.reasoning_output_tokens,
+            date: delta.date,
+        });
+    }
+
+    // Turns observed only as task intervals (no token event) still count as
+    // calls, attributed with zero output tokens.
+    for interval in &summary.task_intervals {
+        let Some(turn_id) = interval.turn_id.as_ref() else {
+            continue;
+        };
+        if latest_deltas.contains_key(turn_id) {
+            continue;
+        }
+        let duration_ms = interval
+            .ended_at
+            .signed_duration_since(interval.started_at)
+            .num_milliseconds();
+        if duration_ms <= 0 {
+            continue;
+        }
+        summary.inference_calls.push(InferenceCallSample {
+            turn_id: Some(turn_id.clone()),
+            model: turn_models
+                .get(turn_id)
+                .cloned()
+                .or_else(|| summary.model.clone()),
+            effort: turn_efforts.get(turn_id).cloned(),
+            duration_ms,
+            output_tokens: 0,
+            reasoning_output_tokens: 0,
+            date: interval.ended_at,
+        });
+    }
+}
+
+fn interval_duration_ms(intervals: &[CodexTaskInterval], turn_id: Option<&str>) -> Option<i64> {
+    let interval = intervals
+        .iter()
+        .find(|interval| interval.turn_id.as_deref() == turn_id)?;
+    let duration_ms = interval
+        .ended_at
+        .signed_duration_since(interval.started_at)
+        .num_milliseconds();
+    (duration_ms > 0).then_some(duration_ms)
 }
 
 #[derive(Debug)]

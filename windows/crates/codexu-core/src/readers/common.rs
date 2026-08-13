@@ -268,6 +268,7 @@ pub fn make_local_usage(summaries: Vec<SessionSummary>, now: DateTime<Utc>) -> O
         }),
         tool_usages,
         skill_usages: Vec::new(), // TODO: implement skill resolver
+        inference_performance: None,
     };
 
     Some(usage)

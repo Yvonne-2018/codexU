@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::inference::InferencePerformance;
+
 /// Quality label for usage data sources.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -217,6 +219,9 @@ pub struct LocalUsage {
     pub project_board: Option<ProjectBoard>,
     pub tool_usages: Vec<ToolUsage>,
     pub skill_usages: Vec<SkillUsage>,
+    /// Per-(model, effort) inference performance rebuilt from Codex transcripts.
+    #[serde(default)]
+    pub inference_performance: Option<InferencePerformance>,
 }
 
 /// A bucket for the recent 7-day bar chart.
