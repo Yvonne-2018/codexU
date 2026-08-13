@@ -145,7 +145,7 @@ pub async fn read_installed_codex_quota() -> anyhow::Result<CodexAppServerQuotaS
     result?
 }
 
-struct WebSocketAppServerTransport {
+pub(crate) struct WebSocketAppServerTransport {
     socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
 }
 
@@ -272,7 +272,7 @@ fn selected_rate_limits(response: &Value) -> Option<&Value> {
         .filter(|value| value.is_object())
 }
 
-fn launch_app_server(port: u16) -> anyhow::Result<Child> {
+pub(crate) fn launch_app_server(port: u16) -> anyhow::Result<Child> {
     let executable = resolve_codex_executable()
         .ok_or_else(|| anyhow::anyhow!("Could not locate the installed Codex CLI executable"))?;
     let mut command = Command::new(executable);
@@ -291,7 +291,7 @@ fn launch_app_server(port: u16) -> anyhow::Result<Child> {
         .map_err(|_| anyhow::anyhow!("Could not launch the installed Codex CLI"))
 }
 
-fn resolve_codex_executable() -> Option<PathBuf> {
+pub(crate) fn resolve_codex_executable() -> Option<PathBuf> {
     let mut candidates = Vec::new();
 
     if let Some(user_profile) = env::var_os("USERPROFILE") {
@@ -345,7 +345,7 @@ fn resolve_codex_executable() -> Option<PathBuf> {
     candidates.into_iter().find(|candidate| candidate.is_file())
 }
 
-async fn reserve_loopback_port() -> anyhow::Result<u16> {
+pub(crate) async fn reserve_loopback_port() -> anyhow::Result<u16> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
         .map_err(|_| anyhow::anyhow!("Could not reserve a loopback port for Codex app-server"))?;
@@ -357,7 +357,9 @@ async fn reserve_loopback_port() -> anyhow::Result<u16> {
     Ok(port)
 }
 
-async fn connect_loopback_transport(endpoint: &str) -> anyhow::Result<WebSocketAppServerTransport> {
+pub(crate) async fn connect_loopback_transport(
+    endpoint: &str,
+) -> anyhow::Result<WebSocketAppServerTransport> {
     let deadline = Instant::now() + APP_SERVER_CONNECT_TIMEOUT;
     loop {
         match connect_async(endpoint).await {
@@ -368,7 +370,7 @@ async fn connect_loopback_transport(endpoint: &str) -> anyhow::Result<WebSocketA
     }
 }
 
-async fn stop_child(child: &mut Child) {
+pub(crate) async fn stop_child(child: &mut Child) {
     if child.try_wait().ok().flatten().is_none() {
         let _ = child.start_kill();
         let _ = timeout(Duration::from_secs(1), child.wait()).await;
