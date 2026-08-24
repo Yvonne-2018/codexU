@@ -38,7 +38,7 @@ use super::common::*;
 use super::model_inference::make_inference_performance;
 use crate::models::*;
 
-const CODEX_CACHE_VERSION: i32 = 4;
+const CODEX_CACHE_VERSION: i32 = 6;
 
 /// On-disk cache for Codex transcript summaries.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -354,7 +354,11 @@ async fn parse_transcript(
         Err(_) => return summary,
     };
 
-    let mut seen_turn_ids = HashSet::new();
+    // Codex writes bursts of distinct token-count events sharing one write
+    // timestamp, so deduping by turn/timestamp would drop real usage. Track the
+    // cumulative `total_token_usage` snapshot instead and skip only true
+    // duplicates where it did not move (mirrors the macOS counter normalizer).
+    let mut last_cumulative: Option<(i64, i64, i64, i64, i64)> = None;
     let mut started_tasks: HashMap<String, DateTime<Utc>> = HashMap::new();
     // Track the most recently observed model per turn so token_count events can
     // inherit it even if the turn_context appeared earlier in the file.
@@ -517,15 +521,14 @@ async fn parse_transcript(
         };
 
         let turn_id = codex_string_value(payload.get("turn_id"));
-        let dedup_key = turn_id.clone().unwrap_or_else(|| {
-            // Token-count events without a turn_id are usually session-level
-            // warm-up/context counts. Use the timestamp as a synthetic key.
-            format!("{}:{}", summary.session_id, timestamp.timestamp_millis())
-        });
-        if seen_turn_ids.contains(&dedup_key) {
-            continue;
+        // Dedup only against a present cumulative snapshot; events without
+        // `total_token_usage` (last-only) are always counted.
+        if let Some(cumulative) = info.get("total_token_usage").and_then(usage_snapshot) {
+            if last_cumulative == Some(cumulative) {
+                continue;
+            }
+            last_cumulative = Some(cumulative);
         }
-        seen_turn_ids.insert(dedup_key);
 
         let model = turn_id
             .as_ref()
@@ -861,15 +864,31 @@ fn parse_usage(usage: &serde_json::Value) -> Option<TokenBreakdown> {
     let output = codex_i64_value(usage.get("output_tokens")).unwrap_or(0);
     let reasoning = codex_i64_value(usage.get("reasoning_output_tokens")).unwrap_or(0);
     let total =
-        codex_i64_value(usage.get("total_tokens")).unwrap_or(input + cached + output + reasoning);
+        codex_i64_value(usage.get("total_tokens")).unwrap_or(input + output + reasoning);
 
     Some(TokenBreakdown {
-        input_tokens: input + cached,
+        // Codex `input_tokens` already includes the cached portion, so cached
+        // input is a subset of `input` and must not be added again (unlike
+        // Claude, where cache creation/read tokens are separate counters).
+        input_tokens: input,
         cached_input_tokens: cached,
         output_tokens: output,
         reasoning_output_tokens: reasoning,
         total_tokens: total,
     })
+}
+
+/// Extracts the cumulative usage snapshot fields used to detect true
+/// duplicates across token-count events. `None` when `total_token_usage` is
+/// missing, in which case the event is always treated as new usage.
+fn usage_snapshot(value: &serde_json::Value) -> Option<(i64, i64, i64, i64, i64)> {
+    Some((
+        codex_i64_value(value.get("input_tokens")).unwrap_or(0),
+        codex_i64_value(value.get("cached_input_tokens")).unwrap_or(0),
+        codex_i64_value(value.get("output_tokens")).unwrap_or(0),
+        codex_i64_value(value.get("reasoning_output_tokens")).unwrap_or(0),
+        codex_i64_value(value.get("total_tokens")).unwrap_or(0),
+    ))
 }
 
 fn codex_string_value(value: Option<&serde_json::Value>) -> Option<String> {
@@ -1066,6 +1085,90 @@ mod tests {
 
         // Should sum last_token_usage deltas (150 + 75 = 225), not total_token_usage totals.
         assert_eq!(usage.lifetime_tokens, 225);
+    }
+
+    #[tokio::test]
+    async fn cached_input_tokens_are_not_double_counted_in_visible_totals() {
+        let temp = tempfile::tempdir().unwrap();
+        let archived = temp.path().join("archived_sessions");
+        tokio::fs::create_dir_all(&archived).await.unwrap();
+
+        // Codex `input_tokens` already includes the cached portion (100 = 10
+        // uncached + 90 cached). Adding cached again would report 210 instead
+        // of the true 120-token total.
+        let session = archived.join("rollout-cached.jsonl");
+        let lines = vec![
+            r#"{"timestamp":"2026-03-26T12:53:47.026Z","type":"session_meta","payload":{"id":"session-c","cwd":"/tmp","model_provider":"openai"}}"#,
+            r#"{"timestamp":"2026-03-26T12:53:48.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":90,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":120}}}}"#,
+        ];
+        tokio::fs::write(&session, lines.join("\n")).await.unwrap();
+
+        let cache = temp.path().join("cache");
+        let reader = CodexTranscriptReader::new(&cache);
+        let usage = reader
+            .load_local_usage(temp.path(), Utc::now())
+            .await
+            .unwrap()
+            .expect("should produce LocalUsage");
+
+        assert_eq!(usage.lifetime_tokens, 120);
+        let detailed = usage.detailed_usage.expect("detailed usage");
+        let tokens = &detailed.lifetime.tokens;
+        assert_eq!(tokens.input_tokens, 100);
+        assert_eq!(tokens.cached_input_tokens, 90);
+        assert_eq!(tokens.total_tokens, 120);
+        assert_eq!(tokens.visible_total_tokens(), 120);
+    }
+
+    #[tokio::test]
+    async fn token_count_events_sharing_a_timestamp_are_all_counted() {
+        let temp = tempfile::tempdir().unwrap();
+        let archived = temp.path().join("archived_sessions");
+        tokio::fs::create_dir_all(&archived).await.unwrap();
+
+        // Codex writes bursts of distinct token-count events with identical
+        // timestamps (two model calls at 12:00:00.000Z here). The old
+        // turn/timestamp dedup kept only the first; both must be counted.
+        let session = archived.join("rollout-same-ts.jsonl");
+        let lines = vec![
+            r#"{"timestamp":"2026-03-26T12:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":80,"cached_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100},"total_token_usage":{"input_tokens":80,"cached_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100}}}}"#,
+            r#"{"timestamp":"2026-03-26T12:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":120,"cached_input_tokens":0,"output_tokens":40,"reasoning_output_tokens":0,"total_tokens":160},"total_token_usage":{"input_tokens":200,"cached_input_tokens":0,"output_tokens":60,"reasoning_output_tokens":0,"total_tokens":260}}}}"#,
+        ];
+        tokio::fs::write(&session, lines.join("\n")).await.unwrap();
+
+        let cache = temp.path().join("cache");
+        let reader = CodexTranscriptReader::new(&cache);
+        let usage = reader
+            .load_local_usage(temp.path(), Utc::now())
+            .await
+            .unwrap()
+            .expect("should produce LocalUsage");
+
+        // 100 + 160 = 260 (both events), not 100 (first only).
+        assert_eq!(usage.lifetime_tokens, 260);
+    }
+
+    #[tokio::test]
+    async fn unchanged_cumulative_snapshot_is_deduplicated() {
+        let temp = tempfile::tempdir().unwrap();
+        let archived = temp.path().join("archived_sessions");
+        tokio::fs::create_dir_all(&archived).await.unwrap();
+
+        // Two events with the same cumulative `total_token_usage` mean the
+        // second re-reports the same usage; only one should be counted.
+        let session = archived.join("rollout-dup-cum.jsonl");
+        let event = r#"{"timestamp":"2026-03-26T12:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":80,"cached_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100},"total_token_usage":{"input_tokens":80,"cached_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100}}}}"#;
+        tokio::fs::write(&session, format!("{event}\n{event}\n")).await.unwrap();
+
+        let cache = temp.path().join("cache");
+        let reader = CodexTranscriptReader::new(&cache);
+        let usage = reader
+            .load_local_usage(temp.path(), Utc::now())
+            .await
+            .unwrap()
+            .expect("should produce LocalUsage");
+
+        assert_eq!(usage.lifetime_tokens, 100);
     }
 
     #[tokio::test]
