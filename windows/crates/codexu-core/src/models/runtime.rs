@@ -34,6 +34,8 @@ pub enum RuntimeMenuStatus {
     SnapshotNeeded,
     Stale,
     Unavailable,
+    /// Official quota query was turned off by the user (e.g. API-key access).
+    QuotaDisabled,
 }
 
 impl RuntimeMenuStatus {
@@ -49,6 +51,8 @@ impl RuntimeMenuStatus {
             (RuntimeMenuStatus::Stale, true) => "Stale",
             (RuntimeMenuStatus::Unavailable, false) => "暂不可用",
             (RuntimeMenuStatus::Unavailable, true) => "Unavailable",
+            (RuntimeMenuStatus::QuotaDisabled, false) => "额度查询已关闭",
+            (RuntimeMenuStatus::QuotaDisabled, true) => "Quota query disabled",
         }
     }
 }

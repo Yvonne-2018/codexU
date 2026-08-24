@@ -5,6 +5,7 @@ import { useI18n } from '../i18n/I18nProvider';
 interface QuotaOverviewProps {
   snapshot: UsageSnapshot | null | undefined;
   sourceLabel: string | null | undefined;
+  status?: string | null;
   onRefresh: () => void;
 }
 
@@ -47,8 +48,9 @@ function QuotaWindow({ label, window, t }: { label: string; window: RateWindow; 
   );
 }
 
-export function QuotaOverview({ snapshot, sourceLabel, onRefresh }: QuotaOverviewProps) {
+export function QuotaOverview({ snapshot, sourceLabel, status, onRefresh }: QuotaOverviewProps) {
   const { t } = useI18n();
+  const quotaDisabled = status === 'quota_disabled';
   const quotaWindows = [
     { label: t('quota.fiveHour'), window: snapshot?.five_hour_quota },
     { label: t('quota.sevenDay'), window: snapshot?.seven_day_quota },
@@ -58,6 +60,13 @@ export function QuotaOverview({ snapshot, sourceLabel, onRefresh }: QuotaOvervie
   const hasQuota = quotaWindows.length > 0;
   const planLabel = snapshot?.account?.plan_type ? t('quota.plan', { value: snapshot.account.plan_type }) : null;
   const limitLabel = snapshot?.limit_name ? t('quota.limit', { value: snapshot.limit_name }) : null;
+  const statusText = quotaDisabled
+    ? t('quota.disabled')
+    : hasQuota
+      ? t('quota.officialSource')
+      : hasAuthoritativeEmptyQuota
+        ? t('quota.noActive')
+        : t('quota.checking');
 
   return (
     <section className="dashboard-home-quota dashboard-home-primary-card glass-panel p-4" aria-label={t('quota.availability')} aria-live="polite">
@@ -77,7 +86,7 @@ export function QuotaOverview({ snapshot, sourceLabel, onRefresh }: QuotaOvervie
           </div>
         </div>
         <span className={`dashboard-overview-status ${hasQuota ? 'dashboard-overview-status-confirmed' : ''}`}>
-          {hasQuota ? t('quota.officialSource') : hasAuthoritativeEmptyQuota ? t('quota.noActive') : t('quota.checking')}
+          {statusText}
         </span>
       </div>
 
@@ -103,11 +112,17 @@ export function QuotaOverview({ snapshot, sourceLabel, onRefresh }: QuotaOvervie
           <div className="quota-overview-state-copy">
             <ShieldAlert size={18} aria-hidden="true" />
             <div>
-              <strong>{hasAuthoritativeEmptyQuota ? t('quota.noActive') : t('quota.checking')}</strong>
-              <p>{t('quota.confirmedOnly')}</p>
+              <strong>
+                {quotaDisabled
+                  ? t('quota.disabled')
+                  : hasAuthoritativeEmptyQuota
+                    ? t('quota.noActive')
+                    : t('quota.checking')}
+              </strong>
+              <p>{quotaDisabled ? t('quota.disabledDetail') : t('quota.confirmedOnly')}</p>
             </div>
           </div>
-          {!hasAuthoritativeEmptyQuota ? (
+          {!quotaDisabled && !hasAuthoritativeEmptyQuota ? (
             <button onClick={onRefresh} className="quota-overview-refresh glass-button" type="button">
               <RefreshCw size={13} aria-hidden="true" />
               {t('quota.retry')}

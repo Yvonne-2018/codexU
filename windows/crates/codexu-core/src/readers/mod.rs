@@ -14,7 +14,8 @@ pub use claude_task_board::ClaudeTaskBoardReader;
 pub use claude_transcript::ClaudeCodeTranscriptReader;
 pub use codex_app_server::{read_installed_codex_quota, CodexAppServerQuotaSnapshot};
 pub use codex_dashboard::{
-    apply_official_quota, retain_last_verified_quota, CodexDashboardProvider,
+    apply_official_quota, mark_claude_quota_query_disabled, mark_codex_quota_query_disabled,
+    retain_last_verified_quota, CodexDashboardProvider,
 };
 pub use codex_state::{CodexStateReader, CodexThreadMetadata};
 pub use codex_task_board::CodexTaskBoardReader;

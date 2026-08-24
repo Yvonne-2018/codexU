@@ -34,11 +34,15 @@ export function Dashboard() {
       ? t('dashboard.status.officialQuotaActive')
       : quotaStatus === 'stale'
         ? t('dashboard.status.officialQuotaLastVerified')
-        : t('dashboard.status.checkingOfficialQuota');
+        : quotaStatus === 'quota_disabled'
+          ? t('dashboard.status.quotaQueryDisabled')
+          : t('dashboard.status.checkingOfficialQuota');
   const quotaStatusClass =
     quotaStatus === 'available'
       ? 'bg-status-ok/12 text-status-ok border-status-ok/30'
-      : 'bg-status-warn/12 text-status-warn border-status-warn/30';
+      : quotaStatus === 'quota_disabled'
+        ? 'bg-surface-inset text-tertiary border-theme'
+        : 'bg-status-warn/12 text-status-warn border-status-warn/30';
 
   const handleThemeChange = async (theme: 'system' | 'light' | 'dark') => {
     await update({ theme });
@@ -164,6 +168,7 @@ export function Dashboard() {
           <DashboardHome
             snapshot={activeSnapshot}
             quotaSourceLabel={activeRuntimeRef?.quota_source_label}
+            quotaStatus={quotaStatus}
             leadershipSignal={dashboard?.leadership ?? null}
             onQuotaRefresh={refresh}
           />

@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ExternalLink,
   FolderOpen,
+  Gauge,
   Loader2,
   Palette,
   Power,
@@ -174,6 +175,17 @@ export function Settings() {
     });
   };
 
+  const handleQuotaToggle = async (
+    key: 'query_codex_official_quota' | 'query_claude_official_quota',
+    next: boolean,
+  ) => {
+    if (!canInvokeTauri) return;
+
+    await runUpdate(async () => {
+      await update({ [key]: next });
+    });
+  };
+
   const handleInterval = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!canInvokeTauri) {
       return;
@@ -277,6 +289,27 @@ export function Settings() {
               value={config.cache_dir}
               onBrowse={() => pickDirectory('cache_dir')}
             />
+          </Section>
+
+          <Section title={t('settings.officialQuota')}>
+            <p className="text-xs text-tertiary mb-3">{t('settings.officialQuotaDetail')}</p>
+            <div className="space-y-3">
+              <ToggleRow
+                label={t('settings.codexOfficialQuota')}
+                icon={<Gauge size={15} aria-hidden="true" />}
+                checked={config.query_codex_official_quota}
+                disabled={!canInvokeTauri}
+                onChange={(next) => handleQuotaToggle('query_codex_official_quota', next)}
+              />
+              <ToggleRow
+                label={t('settings.claudeOfficialQuota')}
+                icon={<Gauge size={15} aria-hidden="true" />}
+                checked={config.query_claude_official_quota}
+                disabled={!canInvokeTauri}
+                onChange={(next) => handleQuotaToggle('query_claude_official_quota', next)}
+              />
+            </div>
+            <p className="text-xs text-tertiary mt-3">{t('settings.officialQuotaApiHint')}</p>
           </Section>
 
           <Section title={t('settings.appearance')}>
@@ -508,6 +541,45 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="glass-panel p-4 sm:p-5">
       <h2 className="text-sm font-semibold text-primary mb-3">{title}</h2>
       {children}
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  icon,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-start gap-2">
+        {icon ? <span className="mt-0.5 shrink-0 text-secondary">{icon}</span> : null}
+        <p className="text-sm text-secondary">{label}</p>
+      </div>
+      <button
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+          checked ? 'bg-data-primary' : 'bg-surface-inset'
+        }`}
+      >
+        <span
+          className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
     </div>
   );
 }

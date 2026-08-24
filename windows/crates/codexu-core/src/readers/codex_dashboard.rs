@@ -100,6 +100,38 @@ pub fn retain_last_verified_quota(
     next
 }
 
+/// Marks a runtime's official quota as disabled by the user (e.g. API-key
+/// access). Local usage stays intact; quota windows are cleared and the status
+/// switches to `QuotaDisabled` so the UI stops showing "checking" states.
+pub fn mark_quota_query_disabled(mut runtime: RuntimeUsageSnapshot) -> RuntimeUsageSnapshot {
+    runtime.snapshot.quota_read_succeeded = false;
+    runtime.snapshot.five_hour_quota = None;
+    runtime.snapshot.seven_day_quota = None;
+    runtime.snapshot.monthly_quota = None;
+    runtime.status = RuntimeMenuStatus::QuotaDisabled;
+    runtime.quota_source_label = "Official quota query is disabled".to_string();
+    runtime
+}
+
+/// Applies the disabled-quota marking to the Codex runtime of a dashboard.
+pub fn mark_codex_quota_query_disabled(
+    mut dashboard: CodexDashboardSnapshot,
+) -> CodexDashboardSnapshot {
+    dashboard.codex = mark_quota_query_disabled(dashboard.codex);
+    dashboard
+}
+
+/// Applies the disabled-quota marking to the Claude Code runtime of a
+/// dashboard when present.
+pub fn mark_claude_quota_query_disabled(
+    mut dashboard: CodexDashboardSnapshot,
+) -> CodexDashboardSnapshot {
+    if let Some(claude) = dashboard.claude_code.take() {
+        dashboard.claude_code = Some(mark_quota_query_disabled(claude));
+    }
+    dashboard
+}
+
 impl CodexDashboardProvider {
     pub fn new(codex_root: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Self {
         Self {
@@ -846,5 +878,84 @@ mod tests {
         legacy_value.as_object_mut().unwrap().remove("claude_code");
         let legacy: CodexDashboardSnapshot = serde_json::from_value(legacy_value).unwrap();
         assert_eq!(legacy.claude_code, None);
+    }
+
+    #[test]
+    fn quota_query_disabled_marking_clears_windows_and_flips_status() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap();
+        let mut runtime = build_codex_runtime_snapshot(None, None, now);
+        // Simulate an authoritative quota read that must be discarded.
+        runtime.snapshot.quota_read_succeeded = true;
+        runtime.snapshot.five_hour_quota = Some(RateWindow {
+            used_percent: 20.0,
+            window_duration_mins: Some(300),
+            resets_at: Some(now + Duration::hours(5)),
+        });
+        runtime.status = RuntimeMenuStatus::Available;
+        runtime.quota_source_label = "Official Codex quota".to_string();
+
+        let marked = mark_quota_query_disabled(runtime);
+        assert_eq!(marked.status, RuntimeMenuStatus::QuotaDisabled);
+        assert!(!marked.snapshot.quota_read_succeeded);
+        assert!(marked.snapshot.five_hour_quota.is_none());
+        assert!(marked.snapshot.seven_day_quota.is_none());
+        assert!(marked.snapshot.monthly_quota.is_none());
+        assert_eq!(
+            marked.quota_source_label,
+            "Official quota query is disabled"
+        );
+    }
+
+    #[test]
+    fn quota_query_disabled_marking_applies_to_codex_and_claude_runtimes() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 28, 12, 0, 0).unwrap();
+        let dashboard = CodexDashboardSnapshot {
+            codex: build_codex_runtime_snapshot(None, None, now),
+            claude_code: Some(RuntimeUsageSnapshot {
+                scope: RuntimeScope::ClaudeCode,
+                snapshot: UsageSnapshot {
+                    refreshed_at: now,
+                    account: AccountInfo {
+                        r#type: "claude-code-local".to_string(),
+                        plan_type: None,
+                        email_present: false,
+                    },
+                    limit_id: "claude-code-local".to_string(),
+                    limit_name: "Claude Code local".to_string(),
+                    quota_read_succeeded: true,
+                    five_hour_quota: Some(RateWindow {
+                        used_percent: 10.0,
+                        window_duration_mins: Some(300),
+                        resets_at: Some(now + Duration::hours(2)),
+                    }),
+                    seven_day_quota: None,
+                    monthly_quota: None,
+                    local: None,
+                    task_board: None,
+                    messages: vec![],
+                },
+                status: RuntimeMenuStatus::Available,
+                quota_source_label: "Official Claude Code quota".to_string(),
+                usage_source_label: "Local Claude Code transcript data".to_string(),
+            }),
+            leadership: CodexLeadershipSignal {
+                score: None,
+                evidence_coverage: 0.0,
+                active_day_count: 0,
+                period: LEADERSHIP_PERIOD_DEFAULT.to_string(),
+                model_version: "test".to_string(),
+                report: None,
+            },
+            refreshed_at: now,
+            messages: vec![],
+        };
+
+        let marked = mark_claude_quota_query_disabled(mark_codex_quota_query_disabled(dashboard));
+        assert_eq!(marked.codex.status, RuntimeMenuStatus::QuotaDisabled);
+        assert!(marked.codex.snapshot.five_hour_quota.is_none());
+        let claude = marked.claude_code.expect("claude runtime kept");
+        assert_eq!(claude.status, RuntimeMenuStatus::QuotaDisabled);
+        assert!(!claude.snapshot.quota_read_succeeded);
+        assert!(claude.snapshot.five_hour_quota.is_none());
     }
 }

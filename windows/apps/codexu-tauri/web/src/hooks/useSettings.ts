@@ -21,6 +21,8 @@ export function useSettings() {
       tray_density: payload.tray_density,
       language: payload.language ?? 'auto',
       palette_id: payload.palette_id ?? 'codexu.default',
+      query_codex_official_quota: payload.query_codex_official_quota ?? true,
+      query_claude_official_quota: payload.query_claude_official_quota ?? true,
     },
     app_data_dir: payload.app_data_dir,
   });

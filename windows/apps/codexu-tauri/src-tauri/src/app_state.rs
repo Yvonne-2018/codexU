@@ -11,8 +11,9 @@ use tracing::{error, info, warn};
 
 use codexu_core::models::CodexDashboardSnapshot;
 use codexu_core::readers::{
-    apply_official_quota, read_installed_codex_quota, retain_last_verified_quota,
-    CodexAppServerQuotaSnapshot, CodexDashboardProvider,
+    apply_official_quota, mark_claude_quota_query_disabled, mark_codex_quota_query_disabled,
+    read_installed_codex_quota, retain_last_verified_quota, CodexAppServerQuotaSnapshot,
+    CodexDashboardProvider,
 };
 
 /// User-configurable app settings.
@@ -37,6 +38,16 @@ pub struct AppConfig {
     /// Interface language preference.
     #[serde(default)]
     pub language: InterfaceLanguage,
+    /// Whether to query the official Codex quota window via the local
+    /// app-server. Disable for API-key access where no official usage exists;
+    /// this avoids launching the Codex CLI on every refresh.
+    #[serde(default = "default_true")]
+    pub query_codex_official_quota: bool,
+    /// Whether to query the official Claude Code quota window. On Windows
+    /// there is no official source yet, but the switch keeps the runtime
+    /// status consistent across platforms.
+    #[serde(default = "default_true")]
+    pub query_claude_official_quota: bool,
 }
 
 impl Default for AppConfig {
@@ -52,12 +63,18 @@ impl Default for AppConfig {
             refresh_interval_secs: default_refresh_interval_secs(),
             tray_density: TrayDensity::Classic,
             language: InterfaceLanguage::Auto,
+            query_codex_official_quota: default_true(),
+            query_claude_official_quota: default_true(),
         }
     }
 }
 
 fn default_refresh_interval_secs() -> u64 {
     60
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_palette_id() -> String {
@@ -276,13 +293,31 @@ impl AppState {
             let now = Utc::now();
             let snapshot = match provider.load_dashboard_snapshot(now).await? {
                 Some(dashboard) => {
-                    let quota = read_installed_codex_quota()
-                        .await
-                        .unwrap_or_else(|_| CodexAppServerQuotaSnapshot::unavailable());
-                    Some(retain_last_verified_quota(
-                        previous_dashboard.as_ref(),
-                        apply_official_quota(dashboard, quota),
-                    ))
+                    let (query_codex, query_claude) = {
+                        let config = self.config.read().await;
+                        (
+                            config.query_codex_official_quota,
+                            config.query_claude_official_quota,
+                        )
+                    };
+                    // Skipping the app-server query entirely avoids launching the
+                    // Codex CLI when the user disabled official quota (API access).
+                    let dashboard = if query_codex {
+                        let quota = read_installed_codex_quota()
+                            .await
+                            .unwrap_or_else(|_| CodexAppServerQuotaSnapshot::unavailable());
+                        retain_last_verified_quota(
+                            previous_dashboard.as_ref(),
+                            apply_official_quota(dashboard, quota),
+                        )
+                    } else {
+                        mark_codex_quota_query_disabled(dashboard)
+                    };
+                    Some(if query_claude {
+                        dashboard
+                    } else {
+                        mark_claude_quota_query_disabled(dashboard)
+                    })
                 }
                 None => None,
             };
@@ -587,6 +622,8 @@ mod tests {
                     refresh_interval_secs: 60,
                     tray_density: TrayDensity::Classic,
                     language: InterfaceLanguage::Auto,
+                    query_codex_official_quota: true,
+                    query_claude_official_quota: true,
                 }),
                 source_generation: 0,
             });

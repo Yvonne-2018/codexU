@@ -65,6 +65,8 @@ pub struct UpdateSettingsRequest {
     pub refresh_interval_secs: Option<u64>,
     pub tray_density: Option<TrayDensity>,
     pub language: Option<InterfaceLanguage>,
+    pub query_codex_official_quota: Option<bool>,
+    pub query_claude_official_quota: Option<bool>,
 }
 
 #[tauri::command]
@@ -98,6 +100,12 @@ pub async fn set_settings(
             }
             if let Some(language) = req.language {
                 config.language = language;
+            }
+            if let Some(value) = req.query_codex_official_quota {
+                config.query_codex_official_quota = value;
+            }
+            if let Some(value) = req.query_claude_official_quota {
+                config.query_claude_official_quota = value;
             }
         })
         .await
@@ -181,9 +189,9 @@ pub struct DiagnosticsReport {
 pub async fn run_diagnostics(
     state: State<'_, std::sync::Arc<AppState>>,
 ) -> Result<DiagnosticsReport, String> {
-    let codex_root = {
+    let (codex_root, query_codex_official_quota) = {
         let config = state.config.read().await;
-        config.codex_root.clone()
+        (config.codex_root.clone(), config.query_codex_official_quota)
     };
 
     let mut messages = Vec::new();
@@ -227,11 +235,18 @@ pub async fn run_diagnostics(
         messages.push("Could not locate the installed Codex CLI executable".to_string());
     }
 
-    let codex_quota_read_succeeded = codexu_core::readers::read_installed_codex_quota()
-        .await
-        .map(|quota| quota.quota_read_succeeded)
-        .unwrap_or(false);
-    if !codex_quota_read_succeeded {
+    let codex_quota_read_succeeded = if query_codex_official_quota {
+        codexu_core::readers::read_installed_codex_quota()
+            .await
+            .map(|quota| quota.quota_read_succeeded)
+            .unwrap_or(false)
+    } else {
+        messages.push(
+            "Official Codex quota query is disabled in settings; skipped".to_string(),
+        );
+        false
+    };
+    if !codex_quota_read_succeeded && query_codex_official_quota {
         messages.push("Could not read official Codex quota from the local app-server".to_string());
     }
 

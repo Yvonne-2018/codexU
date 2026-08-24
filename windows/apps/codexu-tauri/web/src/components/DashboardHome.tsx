@@ -15,6 +15,7 @@ import type { MessageKey } from '../i18n/messages';
 interface DashboardHomeProps {
   snapshot: UsageSnapshot | null | undefined;
   quotaSourceLabel: string | null | undefined;
+  quotaStatus: string | null | undefined;
   leadershipSignal: CodexLeadershipSignal | null | undefined;
   onQuotaRefresh: () => void;
 }
@@ -34,7 +35,13 @@ const formatUSD = (value: unknown): string => {
   return value.toFixed(2);
 };
 
-export function DashboardHome({ snapshot, quotaSourceLabel, leadershipSignal, onQuotaRefresh }: DashboardHomeProps) {
+export function DashboardHome({
+  snapshot,
+  quotaSourceLabel,
+  quotaStatus,
+  leadershipSignal,
+  onQuotaRefresh,
+}: DashboardHomeProps) {
   const { t } = useI18n();
   const usage = snapshot?.local ?? null;
   const signal = leadershipSignal ?? null;
@@ -86,7 +93,12 @@ export function DashboardHome({ snapshot, quotaSourceLabel, leadershipSignal, on
           onOpen={() => setActiveDashboardTab('leadership')}
         />
 
-        <QuotaOverview snapshot={snapshot} sourceLabel={quotaSourceLabel} onRefresh={onQuotaRefresh} />
+        <QuotaOverview
+          snapshot={snapshot}
+          sourceLabel={quotaSourceLabel}
+          status={quotaStatus}
+          onRefresh={onQuotaRefresh}
+        />
 
         <section className="dashboard-home-metrics" aria-label={t('dashboard.aria.localTokenMetrics')}>
           <StatCard

@@ -13,6 +13,8 @@ export interface AppConfig {
   tray_density: TrayDensity;
   language: InterfaceLanguage;
   palette_id: PaletteId;
+  query_codex_official_quota: boolean;
+  query_claude_official_quota: boolean;
 }
 
 export interface SettingsResponse {
@@ -23,6 +25,8 @@ export interface SettingsResponse {
   tray_density: TrayDensity;
   language: InterfaceLanguage;
   palette_id: PaletteId;
+  query_codex_official_quota: boolean;
+  query_claude_official_quota: boolean;
   app_data_dir: string;
 }
 

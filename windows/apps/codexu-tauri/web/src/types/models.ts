@@ -289,7 +289,13 @@ export interface UsageSnapshot {
 
 export type RuntimeScope = 'codex' | 'claude_code';
 
-export type RuntimeMenuStatus = 'available' | 'local_only' | 'snapshot_needed' | 'stale' | 'unavailable';
+export type RuntimeMenuStatus =
+  | 'available'
+  | 'local_only'
+  | 'snapshot_needed'
+  | 'stale'
+  | 'unavailable'
+  | 'quota_disabled';
 
 export interface RuntimeUsageSnapshot {
   scope: RuntimeScope;

@@ -22,9 +22,16 @@ test('renders every returned official quota window and exposes a retryable first
     quota,
     /snapshot\?\.five_hour_quota\s*!=\s*null\s*&&\s*snapshot\?\.seven_day_quota\s*!=\s*null/,
   );
-  assert.match(home, /<QuotaOverview snapshot=\{snapshot\} sourceLabel=\{quotaSourceLabel\} onRefresh=\{onQuotaRefresh\}/);
+  assert.match(
+    home,
+    /<QuotaOverview[\s\S]*?snapshot=\{snapshot\}[\s\S]*?sourceLabel=\{quotaSourceLabel\}[\s\S]*?onRefresh=\{onQuotaRefresh\}/,
+  );
+  assert.match(home, /status=\{quotaStatus\}/);
   assert.match(dashboard, /onQuotaRefresh=\{refresh\}/);
   assert.match(dashboard, /const quotaStatusLabel/);
   assert.match(dashboard, /dashboard\.status\.officialQuotaActive/);
+  assert.match(dashboard, /dashboard\.status\.quotaQueryDisabled/);
+  assert.match(dashboard, /quotaStatus=\{quotaStatus\}/);
+  assert.match(quota, /quota\.disabled/);
   assert.doesNotMatch(quota, /today_tokens|seven_day_tokens|lifetime_tokens/);
 });
