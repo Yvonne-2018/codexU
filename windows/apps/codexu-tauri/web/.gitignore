@@ -1,7 +1,7 @@
 node_modules/
+test-results/
 dist/
 .cache/
 *.log
 .env
 .env.local
-package-lock.json

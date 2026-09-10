@@ -20,6 +20,36 @@ export interface DetailedUsage {
   token_event_count: number;
 }
 
+export type InferencePerformancePeriodId = 'today' | 'sevenDays' | 'twentyEightDays';
+
+export interface InferencePerformanceGroup {
+  id: string;
+  model: string;
+  effort: string;
+  call_count: number;
+  average_daily_call_count: number;
+  average_duration_seconds: number;
+  p50_duration_seconds: number;
+  p90_duration_seconds: number;
+  effective_output_tokens_per_second: number;
+  output_tokens: number;
+  reasoning_output_tokens: number;
+}
+
+export interface InferencePerformancePeriod {
+  period: InferencePerformancePeriodId;
+  coverage_day_count: number;
+  groups: InferencePerformanceGroup[];
+  total_call_count: number;
+}
+
+export interface InferencePerformanceHistory {
+  recording_started_at: number;
+  today: InferencePerformancePeriod | null;
+  seven_days: InferencePerformancePeriod | null;
+  twenty_eight_days: InferencePerformancePeriod | null;
+}
+
 export interface DailyTokenBucket {
   id: string;
   label: string;
@@ -110,24 +140,6 @@ export interface UsageTrend {
   projected_month_cost_usd: number | null;
   active_day_count: number;
   source_quality: 'detailed' | 'approximate';
-}
-
-export interface InferenceModelStats {
-  model: string | null;
-  effort: string | null;
-  call_count: number;
-  total_duration_ms: number;
-  average_duration_ms: number;
-  p50_duration_ms: number;
-  p90_duration_ms: number;
-  total_output_tokens: number;
-  average_tokens_per_second: number;
-  reasoning_output_ratio: number;
-}
-
-export interface InferencePerformance {
-  refreshed_at: number | null;
-  models: InferenceModelStats[];
 }
 
 export interface TaskItem {
@@ -255,10 +267,10 @@ export interface LocalUsage {
   recent_threads: LocalThread[];
   detailed_usage: DetailedUsage | null;
   usage_trend: UsageTrend | null;
+  inference_performance: InferencePerformanceHistory | null;
   project_board: ProjectBoard | null;
   tool_usages: ToolUsage[];
   skill_usages: SkillUsage[];
-  inference_performance: InferencePerformance | null;
 }
 
 export interface RateWindow {

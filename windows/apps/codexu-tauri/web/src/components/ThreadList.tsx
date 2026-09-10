@@ -1,6 +1,7 @@
 import { Archive, Clock, Cpu } from 'lucide-react';
 import type { LocalThread } from '../types/models';
 import { useI18n } from '../i18n/I18nProvider';
+import { formatQuantity } from '../utils/formatQuantity';
 
 interface ThreadListProps {
   threads: LocalThread[];
@@ -57,7 +58,7 @@ export function ThreadList({ threads }: ThreadListProps) {
                   <Clock size={12} /> {formatTime(thread.updated_at, t)}
                 </span>
               )}
-              <span className="font-medium text-primary">{formatNumber(thread.tokens)}</span>
+              <span className="font-medium text-primary">{formatQuantity(thread.tokens)}</span>
             </div>
           </div>
         ))}
@@ -83,8 +84,4 @@ function formatTime(ts: number, t: ReturnType<typeof useI18n>['t']): string {
   const diffDays = Math.floor(diffHrs / 24);
   if (diffDays < 7) return t('usage.daysAgo', { value: diffDays });
   return date.toLocaleDateString();
-}
-
-function formatNumber(n: number): string {
-  return n.toLocaleString();
 }

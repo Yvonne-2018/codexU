@@ -1,5 +1,6 @@
 import type { TokenBreakdown, UsageHeatmapDay, UsageTrend } from '../types/models';
 import { useI18n } from '../i18n/I18nProvider';
+import { formatQuantity } from '../utils/formatQuantity';
 
 interface UsageHeatmapProps {
   trend: UsageTrend | null;
@@ -93,15 +94,11 @@ function heatmapLabel(day: UsageHeatmapDay, t: ReturnType<typeof useI18n>['t']):
   const date = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(day.date));
   if (day.is_future) return t('usage.future', { date });
   if (!day.usage) return t('usage.noRecordedUsage', { date });
-  return t('usage.tokens', { date, value: formatTokens(visibleTotalTokens(day.usage.tokens)) });
+  return t('usage.tokens', { date, value: formatQuantity(visibleTotalTokens(day.usage.tokens)) });
 }
 
 function visibleTotalTokens(tokens: TokenBreakdown): number {
   return Math.max(tokens.total_tokens, tokens.input_tokens + tokens.output_tokens);
-}
-
-function formatTokens(value: number): string {
-  return Math.round(value).toLocaleString();
 }
 
 function sourceQualityLabel(

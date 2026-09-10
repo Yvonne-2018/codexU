@@ -19,6 +19,6 @@ export default defineConfig(async () => ({
     outDir: 'dist',
     sourcemap: true,
     target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
-    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
+    minify: !process.env.TAURI_DEBUG ? 'oxc' : false,
   },
 }));

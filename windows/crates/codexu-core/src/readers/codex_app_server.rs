@@ -282,14 +282,19 @@ pub(crate) fn launch_app_server(port: u16) -> anyhow::Result<Child> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .kill_on_drop(true);
-    #[cfg(windows)]
-    {
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
+    configure_no_console(&mut command);
     command
         .spawn()
         .map_err(|_| anyhow::anyhow!("Could not launch the installed Codex CLI"))
 }
+
+#[cfg(windows)]
+fn configure_no_console(command: &mut Command) {
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn configure_no_console(_command: &mut Command) {}
 
 pub(crate) fn resolve_codex_executable() -> Option<PathBuf> {
     let mut candidates = Vec::new();
@@ -374,6 +379,51 @@ pub(crate) async fn stop_child(child: &mut Child) {
     if child.try_wait().ok().flatten().is_none() {
         let _ = child.start_kill();
         let _ = timeout(Duration::from_secs(1), child.wait()).await;
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn app_server_child_creation_disables_a_console() {
+        let script = r#"
+$signature = @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll")]
+public static extern System.IntPtr GetConsoleWindow();
+'@
+Add-Type -MemberDefinition $signature -Name NativeMethods -Namespace CodexU.ConsoleProbe
+[CodexU.ConsoleProbe.NativeMethods]::GetConsoleWindow().ToInt64()
+"#;
+        let mut command = Command::new("powershell.exe");
+        command
+            .args([
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                script,
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        configure_no_console(&mut command);
+
+        let output = command
+            .output()
+            .await
+            .expect("PowerShell console probe should start");
+        assert!(
+            output.status.success(),
+            "PowerShell console probe failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "0",
+            "CREATE_NO_WINDOW must leave the child without a console"
+        );
     }
 }
 

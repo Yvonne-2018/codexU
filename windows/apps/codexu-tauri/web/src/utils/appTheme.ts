@@ -5,39 +5,11 @@ import {
   type PaletteId,
   type PaletteTokens,
 } from './paletteCatalog';
-
-const FIXED_VISUAL_TOKENS = {
-  light: {
-    surface: '#ffffff',
-    surfaceElevated: 'rgba(255, 255, 255, 0.8)',
-    surfaceElevatedStrong: 'rgba(255, 255, 255, 0.94)',
-    surfaceInset: 'rgba(255, 255, 255, 0.6)',
-    pageBg: '#ffffff',
-    textPrimary: '#111827',
-    textSecondary: '#4b5563',
-    textTertiary: '#6b7280',
-    border: 'rgba(148, 163, 184, 0.30)',
-    statusOk: '#16a34a',
-    statusWarn: '#d97706',
-    statusError: '#dc2626',
-    shadowSoft: '0 16px 42px -30px rgba(15, 23, 42, 0.33)',
-  },
-  dark: {
-    surface: '#0f172a',
-    surfaceElevated: 'rgba(15, 23, 42, 0.86)',
-    surfaceElevatedStrong: 'rgba(15, 23, 42, 0.96)',
-    surfaceInset: 'rgba(15, 23, 42, 0.64)',
-    pageBg: '#0f172a',
-    textPrimary: '#f8fafc',
-    textSecondary: '#cbd5e1',
-    textTertiary: '#94a3b8',
-    border: 'rgba(148, 163, 184, 0.32)',
-    statusOk: '#30d158',
-    statusWarn: '#f59e0b',
-    statusError: '#ff453a',
-    shadowSoft: '0 16px 42px -30px rgba(2, 6, 23, 0.55)',
-  },
-} as const;
+import windowsGlassSurfaceMap from './windowsGlassSurfaceMap.json';
+import {
+  resolveWindowsGlassVisualTokens,
+  type WindowsGlassVisualTokens,
+} from './windowsGlassTokens';
 
 const clampHexAlpha = (hex: string, alpha: number): string => {
   const normalized = hex.replace('#', '').trim();
@@ -108,7 +80,15 @@ const applyPaletteVariables = (theme: ThemeMode, paletteId: PaletteId) => {
   root.style.setProperty('--palette-surface-tint', palette.surfaceTint.color);
   root.style.setProperty('--palette-surface-tint-opacity', String(palette.surfaceTint.maximumOpacity));
 
-  const paletteVisual = isDark ? FIXED_VISUAL_TOKENS.dark : FIXED_VISUAL_TOKENS.light;
+  const paletteVisual = resolveWindowsGlassVisualTokens(isDark, palette.surfaceTint);
+  root.style.setProperty('--palette-surface-tint-active', paletteVisual.paletteSurfaceTintActive);
+  for (const layer of windowsGlassSurfaceMap.layers) {
+    root.style.setProperty(
+      layer.cssVariable,
+      paletteVisual[layer.tokenKey as keyof WindowsGlassVisualTokens],
+    );
+  }
+  root.style.setProperty('--glass-fallback-bg', paletteVisual.glassFallbackBg);
   root.style.setProperty('--surface', paletteVisual.surface);
   root.style.setProperty('--surface-elevated', paletteVisual.surfaceElevated);
   root.style.setProperty('--surface-elevated-strong', paletteVisual.surfaceElevatedStrong);
@@ -121,7 +101,6 @@ const applyPaletteVariables = (theme: ThemeMode, paletteId: PaletteId) => {
   root.style.setProperty('--status-warn', paletteVisual.statusWarn);
   root.style.setProperty('--status-error', paletteVisual.statusError);
   root.style.setProperty('--shadow-soft', paletteVisual.shadowSoft);
-  root.style.setProperty('--page-bg', paletteVisual.pageBg);
 };
 
 export function applyAppTheme(theme: ThemeMode, paletteId: PaletteId = DEFAULT_PALETTE_ID) {

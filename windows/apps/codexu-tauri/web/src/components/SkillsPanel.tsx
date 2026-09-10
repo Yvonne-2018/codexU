@@ -1,10 +1,13 @@
 import { Activity, Eye, Puzzle } from 'lucide-react';
 import type { CSSProperties } from 'react';
-import type { SkillUsage } from '../types/models';
+import type { SkillUsage, ToolUsage } from '../types/models';
 import { useI18n } from '../i18n/I18nProvider';
+import { formatQuantity } from '../utils/formatQuantity';
+import { ToolUsageList } from './ToolUsageList';
 
 interface SkillsPanelProps {
   skills: SkillUsage[];
+  tools: ToolUsage[];
 }
 
 type SkillActivityStyle = CSSProperties & {
@@ -13,22 +16,25 @@ type SkillActivityStyle = CSSProperties & {
 
 const MAX_VISIBLE_SKILLS = 20;
 
-export function SkillsPanel({ skills }: SkillsPanelProps) {
+export function SkillsPanel({ skills, tools }: SkillsPanelProps) {
   const { t } = useI18n();
   if (skills.length === 0) {
     return (
-      <section
-        className="glass-panel flex min-h-[190px] flex-col items-center justify-center p-5 text-center sm:p-6"
-        aria-label={t('skills.ariaLabel')}
-        aria-live="polite"
-      >
-        <Puzzle size={20} className="text-secondary" aria-hidden="true" />
-        <h3 className="mt-3 text-sm font-semibold text-primary">{t('skills.title')}</h3>
-        <p className="mt-2 text-sm text-secondary">{t('skills.empty')}</p>
-        <p className="mt-2 max-w-md text-xs text-tertiary">
-          {t('skills.emptyDetail')}
-        </p>
-      </section>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <section
+          className="glass-panel flex min-h-[190px] flex-col items-center justify-center p-5 text-center sm:p-6"
+          aria-label={t('skills.ariaLabel')}
+          aria-live="polite"
+        >
+          <Puzzle size={20} className="text-secondary" aria-hidden="true" />
+          <h3 className="mt-3 text-sm font-semibold text-primary">{t('skills.title')}</h3>
+          <p className="mt-2 text-sm text-secondary">{t('skills.empty')}</p>
+          <p className="mt-2 max-w-md text-xs text-tertiary">
+            {t('skills.emptyDetail')}
+          </p>
+        </section>
+        <ToolUsageList tools={tools} />
+      </div>
     );
   }
 
@@ -36,81 +42,84 @@ export function SkillsPanel({ skills }: SkillsPanelProps) {
   const rankedSkills = [...skills].sort(compareSkillUsage).slice(0, MAX_VISIBLE_SKILLS);
 
   return (
-    <section className="glass-panel p-4 sm:p-5" aria-label={t('skills.ariaLabel')}>
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/12 text-accent">
-            <Puzzle size={16} aria-hidden="true" />
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold text-primary">{t('skills.title')}</h3>
-            <p className="mt-1 text-xs text-secondary">{t('skills.usage')}</p>
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <section className="glass-panel p-4 sm:p-5" aria-label={t('skills.ariaLabel')}>
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/12 text-accent">
+              <Puzzle size={16} aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold text-primary">{t('skills.title')}</h3>
+              <p className="mt-1 text-xs text-secondary">{t('skills.usage')}</p>
+            </div>
           </div>
+          <span className="inline-flex items-center gap-1.5 self-start chip-like text-tertiary">
+            <Eye size={12} aria-hidden="true" /> {t('skills.privacyFiltered')}
+          </span>
+        </header>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label={t('skills.summary')}>
+          <SummaryMetric label={t('skills.tracked')} value={formatCount(summary.trackedSkills)} />
+          <SummaryMetric label={t('skills.localReads')} value={formatCount(summary.totalReads)} />
+          <SummaryMetric label={t('skills.sessions')} value={formatCount(summary.totalSessions)} />
         </div>
-        <span className="inline-flex items-center gap-1.5 self-start chip-like text-tertiary">
-          <Eye size={12} aria-hidden="true" /> {t('skills.privacyFiltered')}
-        </span>
-      </header>
 
-      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label={t('skills.summary')}>
-        <SummaryMetric label={t('skills.tracked')} value={formatCount(summary.trackedSkills)} />
-        <SummaryMetric label={t('skills.localReads')} value={formatCount(summary.totalReads)} />
-        <SummaryMetric label={t('skills.sessions')} value={formatCount(summary.totalSessions)} />
-      </div>
+        <div className="mt-4 overflow-hidden rounded-xl border border-theme bg-surface-inset" role="list">
+          <div className="hidden items-center gap-4 border-b border-theme px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-tertiary sm:flex sm:px-4">
+            <span className="min-w-0 flex-1">{t('skills.skill')}</span>
+            <span className="w-48 text-right">{t('skills.relativeActivity')}</span>
+            <span className="w-20 text-right">{t('skills.reads')}</span>
+          </div>
+          {rankedSkills.map((skill) => {
+            const reads = safeCount(skill.load_count);
+            const intensity = Math.round((reads / summary.maxReads) * 100);
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-theme bg-surface-inset" role="list">
-        <div className="hidden items-center gap-4 border-b border-theme px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-tertiary sm:flex sm:px-4">
-          <span className="min-w-0 flex-1">{t('skills.skill')}</span>
-          <span className="w-48 text-right">{t('skills.relativeActivity')}</span>
-          <span className="w-20 text-right">{t('skills.reads')}</span>
-        </div>
-        {rankedSkills.map((skill) => {
-          const reads = safeCount(skill.load_count);
-          const intensity = Math.round((reads / summary.maxReads) * 100);
-
-          return (
-            <article
-              key={skill.id}
-              className="flex flex-col gap-3 border-b border-theme px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4 sm:px-4"
-              role="listitem"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="break-words text-sm font-medium leading-snug text-primary" title={skill.name}>
-                  {skill.name}
-                </p>
-                <p className="mt-1 text-xs text-tertiary">
-                  {skill.source_label || t('skills.localSource')} · {formatThreadCount(skill.thread_count, t)} ·{' '}
-                  {formatObservedAt(skill.last_loaded_at, t)}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 sm:w-48 sm:shrink-0">
+            return (
+              <article
+                key={skill.id}
+                className="flex flex-col gap-3 border-b border-theme px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4 sm:px-4"
+                role="listitem"
+              >
                 <div className="min-w-0 flex-1">
-                  <div
-                    className="skill-activity-bar"
-                    role="img"
-                    aria-label={t('skills.relativeActivityValue', { value: intensity })}
-                    style={{ '--skill-intensity': `${intensity}%` } as SkillActivityStyle}
-                  />
-                  <p className="mt-1 text-[11px] text-tertiary sm:text-right">
-                    {t('skills.percentOfTop', { value: intensity })}
+                  <p className="break-words text-sm font-medium leading-snug text-primary" title={skill.name}>
+                    {skill.name}
+                  </p>
+                  <p className="mt-1 text-xs text-tertiary">
+                    {skill.source_label || t('skills.localSource')} · {formatThreadCount(skill.thread_count, t)} ·{' '}
+                    {formatObservedAt(skill.last_loaded_at, t)}
                   </p>
                 </div>
-                <div className="w-20 shrink-0 text-right">
-                  <p className="text-sm font-semibold tabular-nums text-primary">{formatCount(reads)}</p>
-                  <p className="mt-0.5 text-[11px] text-tertiary">{t('skills.localReads')}</p>
-                </div>
-              </div>
-            </article>
-          );
-        })}
-      </div>
 
-      <p className="mt-3 flex items-center gap-1.5 text-xs text-tertiary">
-        <Activity size={13} aria-hidden="true" />
-        {t('skills.localOnly')}
-      </p>
-    </section>
+                <div className="flex items-center gap-3 sm:w-48 sm:shrink-0">
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className="skill-activity-bar"
+                      role="img"
+                      aria-label={t('skills.relativeActivityValue', { value: intensity })}
+                      style={{ '--skill-intensity': `${intensity}%` } as SkillActivityStyle}
+                    />
+                    <p className="mt-1 text-[11px] text-tertiary sm:text-right">
+                      {t('skills.percentOfTop', { value: intensity })}
+                    </p>
+                  </div>
+                  <div className="w-20 shrink-0 text-right">
+                    <p className="text-sm font-semibold tabular-nums text-primary">{formatCount(reads)}</p>
+                    <p className="mt-0.5 text-[11px] text-tertiary">{t('skills.localReads')}</p>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-tertiary">
+          <Activity size={13} aria-hidden="true" />
+          {t('skills.localOnly')}
+        </p>
+      </section>
+      <ToolUsageList tools={tools} />
+    </div>
   );
 }
 
@@ -156,12 +165,12 @@ function safeCount(value: number): number {
 }
 
 function formatCount(value: number): string {
-  return safeCount(value).toLocaleString();
+  return formatQuantity(safeCount(value));
 }
 
 function formatThreadCount(value: number, t: ReturnType<typeof useI18n>['t']): string {
   const count = safeCount(value);
-  return t('skills.sessionCount', { count, unit: count === 1 ? 'session' : 'sessions' });
+  return t('skills.sessionCount', { count: formatQuantity(count), unit: count === 1 ? 'session' : 'sessions' });
 }
 
 function validTimestamp(value: number | null): number | null {

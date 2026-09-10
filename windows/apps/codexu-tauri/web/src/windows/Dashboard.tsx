@@ -51,7 +51,7 @@ export function Dashboard() {
 
   if (error) {
     return (
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col windows-glass-page">
         <Header
           lastUpdated={null}
           theme={settings?.config.theme ?? 'system'}
@@ -76,7 +76,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col windows-glass-page">
       <Header
         lastUpdated={lastUpdated}
         theme={settings?.config.theme ?? 'system'}

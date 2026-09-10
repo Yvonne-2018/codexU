@@ -86,7 +86,7 @@ export function Settings() {
   if (!settings) {
     if (error) {
       return (
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col windows-glass-page" data-glass-surface="page">
           <header className="mx-4 mt-4 glass-toolbar px-5 py-3 rounded-2xl">
             <h1 className="text-lg font-semibold text-primary">{t('settings.title')}</h1>
           </header>
@@ -100,7 +100,7 @@ export function Settings() {
     }
 
     return (
-      <div className="h-full flex items-center justify-center bg-transparent">
+      <div className="h-full flex items-center justify-center windows-glass-page" data-glass-surface="page">
         <div className="glass-panel px-6 py-8 text-sm text-secondary">{t('settings.loading')}</div>
       </div>
     );
@@ -271,14 +271,14 @@ export function Settings() {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div id="settings-window-root" className="h-full flex flex-col windows-glass-page" data-glass-surface="page">
       <header className="mx-4 mt-4 glass-toolbar px-5 py-3 rounded-2xl">
         <h1 className="text-lg font-semibold text-primary">{t('settings.title')}</h1>
       </header>
 
       <main className="flex-1 overflow-auto p-6 md:p-7">
         <div className="max-w-lg mx-auto w-full space-y-6">
-          <Section title={t('settings.dataPaths')}>
+          <Section id="settings-section-data-paths" title={t('settings.dataPaths')}>
             <PathField
               label={t('settings.codexDataRoot')}
               value={config.codex_root}
@@ -312,7 +312,7 @@ export function Settings() {
             <p className="text-xs text-tertiary mt-3">{t('settings.officialQuotaApiHint')}</p>
           </Section>
 
-          <Section title={t('settings.appearance')}>
+          <Section id="settings-section-appearance" title={t('settings.appearance')}>
             <div className="grid grid-cols-3 gap-2">
               {(['light', 'dark', 'system'] as ThemeMode[]).map((themeValue) => (
                 <button
@@ -395,7 +395,7 @@ export function Settings() {
             </div>
           </Section>
 
-          <Section title={t('settings.tray')}>
+          <Section id="settings-section-tray" title={t('settings.tray')}>
             <div className="grid grid-cols-3 gap-2">
               {(['minimal', 'classic', 'rich'] as TrayDensity[]).map((d) => (
                 <button
@@ -412,7 +412,7 @@ export function Settings() {
             </div>
           </Section>
 
-          <Section title={t('settings.refresh')}>
+          <Section id="settings-section-refresh" title={t('settings.refresh')}>
             <label className="block text-sm text-secondary mb-2">{t('settings.interval')}</label>
             <input
               type="number"
@@ -425,6 +425,7 @@ export function Settings() {
             />
             <div className="flex gap-3 mt-4">
               <button
+                id="settings-refresh-now"
                 onClick={refreshUsage}
                 disabled={!canInvokeTauri}
                 className="flex items-center gap-2 px-4 py-2 rounded-full glass-button-solid text-sm"
@@ -432,6 +433,7 @@ export function Settings() {
                 <RefreshCw size={14} /> {t('common.refreshNow')}
               </button>
               <button
+                id="settings-clear-cache"
                 onClick={clearCache}
                 disabled={!canInvokeTauri}
                 className="flex items-center gap-2 px-4 py-2 rounded-full glass-button text-status-error border-status-error/30 text-status-error text-sm"
@@ -517,7 +519,7 @@ export function Settings() {
             ) : null}
           </Section>
 
-          <Section title={t('settings.about')}>
+          <Section id="settings-section-about" title={t('settings.about')}>
             <p className="text-sm text-secondary">{t('settings.version')}</p>
             <p className="text-xs text-tertiary mt-2">{t('settings.dataFolder', { path: settings.app_data_dir })}</p>
             <p className="text-xs text-tertiary mt-2">{t('settings.privacy')}</p>
@@ -536,9 +538,9 @@ export function Settings() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
-    <div className="glass-panel p-4 sm:p-5">
+    <div id={id} className="glass-panel p-4 sm:p-5">
       <h2 className="text-sm font-semibold text-primary mb-3">{title}</h2>
       {children}
     </div>

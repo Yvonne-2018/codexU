@@ -3,7 +3,20 @@
 @tailwind utilities;
 
 :root {
-  --page-bg: #ffffff;
+  --window-bg: rgba(248, 250, 252, 0.72);
+  --palette-surface-tint-active: #2866f714;
+  --page-bg: radial-gradient(circle at top left, var(--palette-surface-tint-active), transparent 36rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(241, 245, 249, 0.58));
+  --toolbar-bg: rgba(255, 255, 255, 0.66);
+  --card-bg: rgba(255, 255, 255, 0.72);
+  --card-bg-strong: rgba(255, 255, 255, 0.9);
+  --control-bg: rgba(255, 255, 255, 0.58);
+  --focus-surface: rgba(40, 102, 247, 0.7);
+  --status-surface: rgba(255, 255, 255, 0.56);
+  --glass-fallback-bg: rgba(255, 255, 255, 0.96);
+  --glass-fallback-window-bg: #f8fafc;
+  --glass-fallback-page-bg: #f1f5f9;
+  --glass-fallback-status-bg: #ffffff;
   --accent: #2866f7;
   --accent-secondary: #8b6dff;
   --accent-strong: #1f59ed;
@@ -48,7 +61,20 @@
 }
 
 .dark {
-  --page-bg: #0f172a;
+  --window-bg: rgba(2, 6, 23, 0.82);
+  --palette-surface-tint-active: #2866f714;
+  --page-bg: radial-gradient(circle at top left, var(--palette-surface-tint-active), transparent 34rem),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.76), rgba(2, 6, 23, 0.7));
+  --toolbar-bg: rgba(15, 23, 42, 0.68);
+  --card-bg: rgba(15, 23, 42, 0.72);
+  --card-bg-strong: rgba(15, 23, 42, 0.9);
+  --control-bg: rgba(30, 41, 59, 0.62);
+  --focus-surface: rgba(123, 160, 255, 0.78);
+  --status-surface: rgba(15, 23, 42, 0.58);
+  --glass-fallback-bg: rgba(15, 23, 42, 0.96);
+  --glass-fallback-window-bg: #020617;
+  --glass-fallback-page-bg: #0f172a;
+  --glass-fallback-status-bg: #1e293b;
   --accent: #2866f7;
   --accent-secondary: #8b6dff;
   --accent-strong: #1f59ed;
@@ -105,7 +131,7 @@ body,
 
 body {
   font-family: 'SF Pro Text', 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--page-bg);
+  background: var(--window-bg);
   color: var(--text-primary);
   transition: background-color 150ms ease, color 150ms ease;
   min-height: 100vh;
@@ -155,8 +181,13 @@ body {
 }
 
 @layer components {
+  .windows-glass-page {
+    min-height: 100%;
+    background: var(--page-bg);
+  }
+
   .glass-panel {
-    background: var(--surface-elevated);
+    background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: 18px;
     box-shadow: var(--shadow-soft);
@@ -164,7 +195,7 @@ body {
   }
 
   .glass-panel-strong {
-    background: var(--surface-elevated-strong);
+    background: var(--card-bg-strong);
     border: 1px solid var(--border);
     border-radius: 18px;
     box-shadow: var(--shadow-soft);
@@ -172,14 +203,14 @@ body {
   }
 
   .glass-toolbar {
-    background: color-mix(in oklab, var(--surface-elevated) 72%, transparent);
+    background: var(--toolbar-bg);
     border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
     backdrop-filter: saturate(200%) blur(26px);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
 
   .glass-button {
-    background: color-mix(in oklab, var(--surface-elevated) 78%, transparent);
+    background: var(--control-bg);
     border: 1px solid var(--border);
     backdrop-filter: blur(16px);
     box-shadow: 0 10px 22px -16px rgba(15, 23, 42, 0.35);
@@ -207,7 +238,7 @@ body {
   }
 
   .leadership-overview-card:focus-visible {
-    outline: 2px solid var(--selection-focus-ring);
+    outline: 2px solid var(--focus-surface);
     outline-offset: 2px;
   }
 
@@ -748,7 +779,7 @@ body {
     border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
     border-radius: 999px;
     color: var(--text-tertiary);
-    background: var(--surface-inset);
+    background: var(--status-surface);
     font-size: 0.6rem;
     font-weight: 700;
     line-height: 1.15;
@@ -1082,6 +1113,283 @@ body {
     font-variant-numeric: tabular-nums;
   }
 
+  .inference-performance-panel {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .inference-period-switcher {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.32rem;
+  }
+
+  .inference-period-switcher button {
+    min-height: 1.9rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+
+  .inference-help {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.42rem;
+    color: var(--text-tertiary);
+    font-size: 0.7rem;
+    line-height: 1.35;
+  }
+
+  .inference-help svg {
+    flex: 0 0 auto;
+    margin-top: 0.08rem;
+    color: var(--data-tertiary);
+  }
+
+  .inference-empty {
+    display: flex;
+    min-height: 12rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7rem;
+    padding: 1rem;
+    border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+    border-radius: 0.95rem;
+    background: color-mix(in oklab, var(--surface-inset) 74%, transparent);
+    color: var(--text-tertiary);
+    text-align: left;
+  }
+
+  .inference-empty svg {
+    flex: 0 0 auto;
+    color: var(--accent);
+  }
+
+  .inference-empty strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+  }
+
+  .inference-empty p {
+    margin: 0.18rem 0 0;
+    font-size: 0.68rem;
+    line-height: 1.35;
+  }
+
+  .inference-chart-wrap {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .inference-chart-stage {
+    position: relative;
+  }
+
+  .inference-scatter {
+    width: 100%;
+    min-height: 18rem;
+    overflow: visible;
+    border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+    border-radius: 1rem;
+    background: color-mix(in oklab, var(--surface-inset) 64%, transparent);
+  }
+
+  .inference-grid-line {
+    stroke: color-mix(in oklab, var(--border) 76%, transparent);
+    stroke-width: 1;
+    stroke-dasharray: 4 5;
+  }
+
+  .inference-outlier-lane {
+    fill: color-mix(in oklab, var(--surface-inset) 78%, transparent);
+  }
+
+  .inference-outlier-guide {
+    stroke: color-mix(in oklab, var(--border-strong) 68%, transparent);
+    stroke-width: 1;
+    stroke-dasharray: 2 4;
+  }
+
+  .inference-outlier-tick-mark,
+  .inference-regular-tick-mark,
+  .inference-axis-break-line {
+    stroke: var(--text-tertiary);
+    stroke-linecap: round;
+    stroke-width: 1.35;
+  }
+
+  .inference-outlier-tick,
+  .inference-regular-tick,
+  .inference-duration-tick {
+    fill: var(--text-secondary);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .inference-outlier-tick {
+    font-weight: 700;
+  }
+
+  .inference-regular-tick,
+  .inference-duration-tick {
+    font-weight: 600;
+  }
+
+  .inference-axis-label,
+  .inference-point-label {
+    fill: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .inference-point-label {
+    fill: var(--text-secondary);
+    paint-order: stroke;
+    stroke: color-mix(in oklab, var(--surface-elevated-strong) 82%, transparent);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+
+  .inference-point-label-outlier {
+    font-size: 10px;
+  }
+
+  .inference-whisker {
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0.64;
+  }
+
+  .inference-bubble {
+    opacity: 0.86;
+    stroke: color-mix(in oklab, white 78%, transparent);
+    stroke-width: 1.5;
+  }
+
+  .inference-scatter-point-hit {
+    fill: transparent;
+    pointer-events: all;
+  }
+
+  .inference-scatter-point {
+    cursor: pointer;
+    outline: none;
+  }
+
+  .inference-scatter-point:hover .inference-bubble,
+  .inference-scatter-point:focus .inference-bubble {
+    opacity: 1;
+    stroke-width: 2.5;
+  }
+
+  .inference-scatter-point:focus-visible .inference-scatter-point-hit {
+    stroke: var(--selection-focus-ring);
+    stroke-width: 2;
+  }
+
+  .inference-point-tooltip {
+    position: absolute;
+    z-index: 5;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: min(18rem, calc(100% - 1.5rem));
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.85rem;
+    background: color-mix(in oklab, var(--surface-elevated-strong) 94%, transparent);
+    box-shadow: var(--shadow-soft);
+    color: var(--text-primary);
+    pointer-events: none;
+    backdrop-filter: blur(18px) saturate(1.1);
+  }
+
+  .inference-point-tooltip-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .inference-point-tooltip-heading strong {
+    overflow: hidden;
+    font-size: 0.76rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inference-point-tooltip-heading span {
+    color: var(--text-tertiary);
+    font-size: 0.66rem;
+    font-weight: 700;
+  }
+
+  .inference-point-tooltip-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 0.75rem;
+    margin: 0.65rem 0 0;
+  }
+
+  .inference-point-tooltip-grid div {
+    min-width: 0;
+  }
+
+  .inference-point-tooltip-grid dt {
+    color: var(--text-tertiary);
+    font-size: 0.6rem;
+  }
+
+  .inference-point-tooltip-grid dd {
+    margin: 0.08rem 0 0;
+    overflow: hidden;
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inference-point-tooltip p {
+    margin: 0.65rem 0 0;
+    color: var(--text-tertiary);
+    font-size: 0.6rem;
+    line-height: 1.35;
+  }
+
+  .inference-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .inference-summary-grid > div {
+    min-width: 0;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid color-mix(in oklab, var(--border) 76%, transparent);
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, var(--surface-inset) 72%, transparent);
+  }
+
+  .inference-summary-grid span {
+    display: block;
+    overflow: hidden;
+    color: var(--text-tertiary);
+    font-size: 0.66rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .inference-summary-grid strong {
+    display: block;
+    margin-top: 0.18rem;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+  }
+
   .dashboard-home-metrics {
     display: grid;
     align-content: start;
@@ -1120,8 +1428,46 @@ body {
   }
 
   .leadership-command-rail-clickable:focus-visible {
-    outline: 2px solid var(--selection-stroke);
+    outline: 2px solid var(--focus-surface);
     outline-offset: 2px;
+  }
+}
+
+:where(button, [role='button'], input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--focus-surface);
+  outline-offset: 2px;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --window-bg: var(--glass-fallback-window-bg);
+    --page-bg: var(--glass-fallback-page-bg);
+    --toolbar-bg: var(--glass-fallback-bg);
+    --card-bg: var(--glass-fallback-bg);
+    --card-bg-strong: var(--glass-fallback-bg);
+    --control-bg: var(--glass-fallback-bg);
+    --status-surface: var(--glass-fallback-status-bg);
+  }
+
+  body {
+    background: var(--glass-fallback-window-bg);
+  }
+
+  .windows-glass-page {
+    background: var(--glass-fallback-page-bg);
+  }
+
+  .glass-toolbar,
+  .glass-panel,
+  .glass-panel-strong,
+  .glass-button {
+    background: var(--glass-fallback-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .dashboard-overview-status {
+    background: var(--glass-fallback-status-bg);
   }
 }
 

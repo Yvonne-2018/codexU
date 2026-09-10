@@ -88,17 +88,21 @@ export function Header({
         </div>
 
         <button
+          id="header-refresh"
           onClick={onRefresh}
           disabled={refreshing}
           className="p-2 rounded-full glass-button text-secondary hover:text-primary transition-colors disabled:opacity-50"
+          aria-label={t('common.refresh')}
           title={t('common.refresh')}
         >
           <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
         </button>
 
         <button
+          id="header-open-settings"
           onClick={openSettings}
           className="p-2 rounded-full glass-button-solid"
+          aria-label={t('common.settings')}
           title={t('common.settings')}
         >
           <Settings size={16} />

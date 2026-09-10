@@ -6,6 +6,7 @@ import {
   isTauriRuntimeAvailable,
   requireTauriRuntime,
 } from '../utils/tauri';
+import { getVisualTestData } from '../types/visualTest';
 
 export function useSettings() {
   const [settings, setSettings] = useState<SettingsDto | null>(null);
@@ -55,6 +56,13 @@ export function useSettings() {
   }, []);
 
   useEffect(() => {
+    const visualSettings = getVisualTestData()?.settings;
+    if (visualSettings) {
+      setSettings(visualSettings);
+      setLoading(false);
+      return;
+    }
+
     load();
 
     if (!isTauriRuntimeAvailable()) {

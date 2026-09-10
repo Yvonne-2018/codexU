@@ -22,7 +22,7 @@
         "center": true,
         "visible": false,
         "decorations": true,
-        "transparent": false,
+        "transparent": true,
         "focus": false
       }
     ],

@@ -1,31 +1,26 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::{offset::LocalResult, DateTime, Duration, Local, NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, Utc};
 
 use crate::models::*;
 use crate::readers::common::{CodexTaskInterval, SessionSummary};
+use crate::StatisticsTimeZone;
 
 /// Build a leadership snapshot from parsed session summaries.
 pub fn build_leadership_snapshot(
     sessions: &[SessionSummary],
     now: DateTime<Utc>,
 ) -> LeadershipDashboardSnapshot {
-    let statistics_tz = LeadershipStatisticsTimezone::Local;
+    let statistics_tz = StatisticsTimeZone::Local;
     build_leadership_snapshot_with_timezone(sessions, now, statistics_tz)
 }
 
 /// Build a leadership snapshot with an explicit local statistics boundary.
 /// This supports timezone-aware day bucketing in period metrics.
-#[derive(Debug, Clone, Copy)]
-pub enum LeadershipStatisticsTimezone {
-    Local,
-    Named(chrono_tz::Tz),
-}
-
 pub fn build_leadership_snapshot_with_timezone(
     sessions: &[SessionSummary],
     now: DateTime<Utc>,
-    statistics_tz: LeadershipStatisticsTimezone,
+    statistics_tz: StatisticsTimeZone,
 ) -> LeadershipDashboardSnapshot {
     let workers = deduplicate_workers(sessions.iter().map(make_worker).collect());
     let intervals = build_intervals(sessions, &workers, now);
@@ -128,7 +123,7 @@ fn build_report(
     intervals: &[LeadershipInterval],
     now: DateTime<Utc>,
     day_count: i64,
-    statistics_tz: LeadershipStatisticsTimezone,
+    statistics_tz: StatisticsTimeZone,
 ) -> LeadershipReport {
     let start = statistics_tz.days_before_start(now, day_count - 1);
 
@@ -517,7 +512,7 @@ fn build_daily_points(
     intervals: &[LeadershipInterval],
     start: DateTime<Utc>,
     now: DateTime<Utc>,
-    statistics_tz: LeadershipStatisticsTimezone,
+    statistics_tz: StatisticsTimeZone,
 ) -> Vec<LeadershipDayPoint> {
     let mut points = Vec::new();
     let mut day = statistics_tz.day_start(start);
@@ -551,7 +546,7 @@ fn build_daily_points(
 fn day_has_autonomous(
     day: DateTime<Utc>,
     intervals: &[LeadershipInterval],
-    statistics_tz: LeadershipStatisticsTimezone,
+    statistics_tz: StatisticsTimeZone,
 ) -> bool {
     let next = statistics_tz.next_day_start(day);
     intervals
@@ -830,88 +825,6 @@ fn hash_path(value: &str) -> String {
     format!("{hash:x}")
 }
 
-impl LeadershipStatisticsTimezone {
-    fn day_start(&self, date: DateTime<Utc>) -> DateTime<Utc> {
-        match self {
-            Self::Local => day_start_in_timezone(date, &Local),
-            Self::Named(timezone) => day_start_in_timezone(date, timezone),
-        }
-    }
-
-    fn days_before_start(&self, date: DateTime<Utc>, day_count: i64) -> DateTime<Utc> {
-        if day_count <= 0 {
-            return self.day_start(date);
-        }
-        match self {
-            Self::Local => {
-                let local_day = date.with_timezone(&Local).date_naive() - Duration::days(day_count);
-                to_midnight_utc_from_date(local_day, &Local)
-                    .or_else(|| to_midnight_utc_from_date(local_day + Duration::days(1), &Local))
-                    .unwrap_or_else(|| self.day_start(date))
-            }
-            Self::Named(timezone) => {
-                let local_day =
-                    date.with_timezone(timezone).date_naive() - Duration::days(day_count);
-                to_midnight_utc_from_date(local_day, timezone)
-                    .or_else(|| to_midnight_utc_from_date(local_day + Duration::days(1), timezone))
-                    .unwrap_or_else(|| self.day_start(date))
-            }
-        }
-    }
-
-    fn next_day_start(&self, date: DateTime<Utc>) -> DateTime<Utc> {
-        match self {
-            Self::Local => {
-                let next_local_day: NaiveDate =
-                    date.with_timezone(&Local).date_naive() + Duration::days(1);
-                to_midnight_utc_from_date(next_local_day, &Local)
-                    .or_else(|| {
-                        to_midnight_utc_from_date(next_local_day + Duration::days(1), &Local)
-                    })
-                    .unwrap_or(date)
-            }
-            Self::Named(timezone) => {
-                let next_local_day: NaiveDate =
-                    date.with_timezone(timezone).date_naive() + Duration::days(1);
-                to_midnight_utc_from_date(next_local_day, timezone)
-                    .or_else(|| {
-                        to_midnight_utc_from_date(next_local_day + Duration::days(1), timezone)
-                    })
-                    .unwrap_or(date)
-            }
-        }
-    }
-}
-
-fn day_start_in_timezone<Tz: TimeZone>(date: DateTime<Utc>, timezone: &Tz) -> DateTime<Utc> {
-    let local = date.with_timezone(timezone);
-    to_midnight_utc_from_date(local.date_naive(), timezone).unwrap_or(date)
-}
-
-fn to_midnight_utc_from_date<Tz: TimeZone>(
-    date: NaiveDate,
-    timezone: &Tz,
-) -> Option<DateTime<Utc>> {
-    resolve_midnight_utc(timezone, date)
-}
-
-fn resolve_midnight_utc<Tz: TimeZone>(timezone: &Tz, date: NaiveDate) -> Option<DateTime<Utc>> {
-    let local_midnight = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
-    let mut local = date.and_time(local_midnight);
-    loop {
-        match timezone.from_local_datetime(&local) {
-            LocalResult::Single(datetime) => return Some(datetime.with_timezone(&Utc)),
-            LocalResult::Ambiguous(earliest, _) => return Some(earliest.with_timezone(&Utc)),
-            LocalResult::None => {
-                local += Duration::minutes(1);
-                if local.date() != date {
-                    return None;
-                }
-            }
-        }
-    }
-}
-
 fn duration_seconds(interval: &LeadershipInterval) -> f64 {
     (interval.end_at - interval.start_at).num_milliseconds() as f64 / 1000.0
 }
@@ -923,6 +836,7 @@ mod tests {
     use crate::readers::codex_transcript::CodexTranscriptSummary;
     use crate::readers::common::CodexTaskInterval;
     use crate::readers::CodexTranscriptReader;
+    use chrono::TimeZone;
     use std::collections::HashMap;
     use tempfile::tempdir;
 
@@ -1412,10 +1326,10 @@ mod tests {
             &intervals,
             now,
             3,
-            LeadershipStatisticsTimezone::Named(tz),
+            StatisticsTimeZone::Named(tz),
         );
 
-        let expected_start = LeadershipStatisticsTimezone::Named(tz).days_before_start(now, 2);
+        let expected_start = StatisticsTimeZone::Named(tz).days_before_start(now, 2);
         let report_daily_points = report
             .daily_points
             .iter()
@@ -1442,7 +1356,7 @@ mod tests {
         let snapshot = build_leadership_snapshot_with_timezone(
             std::slice::from_ref(&session),
             now,
-            LeadershipStatisticsTimezone::Named(tz),
+            StatisticsTimeZone::Named(tz),
         );
         let report = snapshot
             .reports

@@ -14,7 +14,14 @@ test('activates the Dashboard Skills tab with safe local-read metadata only', as
     readFile(panelPath, 'utf8'),
   ]);
 
-  assert.match(home, /<SkillsPanel skills=\{usage\?\.skill_usages \?\? \[\]\} \/>/);
+  assert.match(
+    home,
+    /<SkillsPanel\s+skills=\{usage\?\.skill_usages \?\? \[\]\}\s+tools=\{usage\?\.tool_usages \?\? \[\]\}\s+\/>/,
+  );
+  assert.match(panel, /import \{ ToolUsageList \} from '\.\/ToolUsageList';/);
+  assert.match(panel, /<ToolUsageList tools=\{tools\} \/>/);
+  assert.match(panel, /grid-cols-1/);
+  assert.match(panel, /md:grid-cols-2/);
   assert.match(panel, /useI18n/);
   assert.match(panel, /skills\.usage/);
   assert.match(panel, /skills\.tracked/);
@@ -24,6 +31,8 @@ test('activates the Dashboard Skills tab with safe local-read metadata only', as
   assert.match(panel, /skills\.relativeActivityValue/);
   assert.match(panel, /skills\.privacyFiltered/);
   assert.match(panel, /skills\.localOnly/);
+  assert.match(panel, /formatQuantity/);
+  assert.match(panel, /formatQuantity\(safeCount\(value\)\)/);
 
   const skillUsage = models.match(/export interface SkillUsage \{([\s\S]*?)\n\}/)?.[1] ?? '';
   assert.match(skillUsage, /load_count: number;/);

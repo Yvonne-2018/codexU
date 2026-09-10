@@ -42,6 +42,7 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     };
     apply_theme(&app, theme);
     let _ = window.show();
+    let _ = window.set_focus();
     Ok(())
 }
 
@@ -241,9 +242,7 @@ pub async fn run_diagnostics(
             .map(|quota| quota.quota_read_succeeded)
             .unwrap_or(false)
     } else {
-        messages.push(
-            "Official Codex quota query is disabled in settings; skipped".to_string(),
-        );
+        messages.push("Official Codex quota query is disabled in settings; skipped".to_string());
         false
     };
     if !codex_quota_read_succeeded && query_codex_official_quota {

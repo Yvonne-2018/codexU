@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
+use tracing::warn;
 
 use crate::app_state::ResolvedLanguage;
 use crate::commands::usage::refresh_usage;
@@ -51,11 +52,11 @@ pub fn setup_tray(app: &AppHandle, language: ResolvedLanguage) -> anyhow::Result
                 ..
             } = event
             {
-                show_main_window(tray.app_handle());
+                show_main_window_or_log(tray.app_handle());
             }
         })
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => show_main_window(app),
+            "open" => show_main_window_or_log(app),
             "settings" => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
@@ -204,12 +205,22 @@ fn quota_line(language: ResolvedLanguage, key: &str, used_percent: f64) -> Strin
     format!("{}: {:.0}%", label, used_percent)
 }
 
-pub fn show_main_window(app: &AppHandle) {
+pub(crate) fn show_main_window_or_log(app: &AppHandle) {
+    if let Err(error) = show_main_window(app) {
+        warn!(error = %error, "Could not show main window from tray action");
+    }
+}
+
+pub fn show_main_window(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
+        window
+            .show()
+            .map_err(|e| format!("Failed to show main window: {}", e))?;
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus main window: {}", e))?;
     } else {
-        let _ = tauri::WebviewWindowBuilder::from_config(
+        let window = tauri::WebviewWindowBuilder::from_config(
             app,
             &app.config()
                 .app
@@ -218,9 +229,17 @@ pub fn show_main_window(app: &AppHandle) {
                 .cloned()
                 .unwrap_or_default(),
         )
-        .unwrap_or_else(|_| panic!("Failed to create main window"))
-        .build();
+        .map_err(|e| format!("Failed to create main window builder: {}", e))?
+        .build()
+        .map_err(|e| format!("Failed to build main window: {}", e))?;
+        window
+            .show()
+            .map_err(|e| format!("Failed to show rebuilt main window: {}", e))?;
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus rebuilt main window: {}", e))?;
     }
+    Ok(())
 }
 
 pub fn hide_to_tray(window: &tauri::WebviewWindow) {

@@ -2,6 +2,7 @@ import { Activity, Folder } from 'lucide-react';
 import { useState } from 'react';
 import type { ProjectBoard as ProjectBoardData, ProjectUsage } from '../types/models';
 import { useI18n } from '../i18n/I18nProvider';
+import { formatQuantity } from '../utils/formatQuantity';
 
 type ProjectTimeframe = 'recent' | 'all';
 
@@ -75,18 +76,23 @@ function ProjectRankingRow({ project, maxTokens, t }: ProjectRankingRowProps) {
 
   return (
     <div className="rounded-2xl border border-theme bg-surface-inset p-3 space-y-2">
-      <div className="flex items-start gap-3">
+      <div className="grid items-start gap-3 grid-cols-[auto,1fr,auto]">
         <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-data-secondary/12 text-data-secondary shrink-0">
           <Folder size={13} aria-hidden="true" />
         </span>
-        <div className="min-w-0 flex-1">
+        <div
+          className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md -m-0.5 px-0.5 py-0.5"
+          title={project.full_path}
+          tabIndex={0}
+          aria-label={`project full path: ${project.full_path}`}
+        >
           <p className="truncate text-sm font-semibold text-primary">{project.name}</p>
           <p className="mt-0.5 truncate text-xs text-secondary">
             {t('projects.threads', { count: project.thread_count })} · {formatLastActive(project.last_active_at, t)}
           </p>
         </div>
-        <div className="shrink-0 text-right">
-          <p className="text-sm font-semibold tabular-nums text-primary">{formatNumber(project.tokens)}</p>
+        <div className="w-36 shrink-0 text-right">
+          <p className="text-sm font-semibold tabular-nums text-primary">{formatQuantity(project.tokens)}</p>
           <p className="mt-0.5 text-[11px] text-tertiary">{formatProjectSecondaryValue(project, t)}</p>
         </div>
       </div>
@@ -146,7 +152,7 @@ export function ProjectActivityOverview({ projectBoard }: ProjectBoardProps) {
         <>
           <div className="grid grid-cols-2 gap-2">
             <ProjectMetric label={t('projects.sevenDayProjects')} value={String(recentProjects.length)} />
-            <ProjectMetric label={t('projects.recordedTokens')} value={formatNumber(recentTokenTotal)} />
+            <ProjectMetric label={t('projects.recordedTokens')} value={formatQuantity(recentTokenTotal)} />
             <ProjectMetric label={t('projects.topOneShare')} value={formatShare(recentProjects[0]?.tokens ?? 0, recentTokenTotal)} />
             <ProjectMetric
               label={t('projects.topThreeShare')}
@@ -161,17 +167,25 @@ export function ProjectActivityOverview({ projectBoard }: ProjectBoardProps) {
             <p className="text-xs font-semibold text-secondary">{t('projects.recentActivity')}</p>
             <div className="mt-2 space-y-2">
               {recentActivity.map((project) => (
-                <div key={project.id} className="flex items-center gap-2.5 rounded-xl border border-theme bg-surface-inset px-2.5 py-2">
+                <div
+                  key={project.id}
+                  className="grid items-center gap-2.5 rounded-xl border border-theme bg-surface-inset px-2.5 py-2 grid-cols-[auto,1fr,auto]"
+                >
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-data-secondary/12 text-data-secondary shrink-0">
                     <Folder size={12} aria-hidden="true" />
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div
+                    className="min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-md -m-0.5 px-0.5 py-0.5"
+                    title={project.full_path}
+                    tabIndex={0}
+                    aria-label={`project full path: ${project.full_path}`}
+                  >
                     <p className="truncate text-xs font-semibold text-primary">{project.name}</p>
                     <p className="mt-0.5 truncate text-[11px] text-tertiary">
                       {t('projects.threads', { count: project.thread_count })} · {formatLastActive(project.last_active_at, t)}
                     </p>
                   </div>
-                  <span className="shrink-0 text-xs font-semibold tabular-nums text-primary">{formatNumber(project.tokens)}</span>
+                  <span className="w-28 shrink-0 text-xs font-semibold tabular-nums text-primary text-right">{formatQuantity(project.tokens)}</span>
                 </div>
               ))}
             </div>
@@ -189,11 +203,6 @@ function ProjectMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-semibold tabular-nums text-primary">{value}</p>
     </div>
   );
-}
-
-function formatNumber(value: number): string {
-  if (!Number.isFinite(value)) return '--';
-  return Math.round(value).toLocaleString();
 }
 
 function formatProjectSecondaryValue(project: ProjectUsage, t: ReturnType<typeof useI18n>['t']): string {

@@ -35,10 +35,9 @@ use serde::{Deserialize, Serialize};
 
 use super::codex_state::CodexThreadMetadata;
 use super::common::*;
-use super::model_inference::make_inference_performance;
 use crate::models::*;
 
-const CODEX_CACHE_VERSION: i32 = 6;
+const CODEX_CACHE_VERSION: i32 = 7;
 
 /// On-disk cache for Codex transcript summaries.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -79,10 +78,6 @@ pub struct CodexTranscriptSummary {
     pub skill_loads: Vec<CodexSkillLoad>,
     #[serde(default)]
     pub task_intervals: Vec<CodexTaskInterval>,
-    /// Per-turn inference call samples rebuilt from task durations, turn
-    /// context (model/effort), and token-count events.
-    #[serde(default)]
-    pub inference_calls: Vec<InferenceCallSample>,
 }
 
 /// A privacy-preserving local skill-read observation.
@@ -155,56 +150,62 @@ impl CodexTranscriptReader {
         let summaries = self.load_local_summaries_internal(data_root).await?;
         Ok(summaries.and_then(|summaries| {
             let skill_usages = make_skill_usages(&summaries);
-            let inference_performance = make_inference_performance(&summaries, now);
             let sessions = combine_session_metadata(summaries, metadata);
             let mut usage = make_local_usage(sessions, now)?;
             usage.skill_usages = skill_usages;
-            usage.inference_performance = inference_performance;
             Some(usage)
         }))
+    }
+
+    pub(crate) async fn load_dashboard_inputs_from_index(
+        &self,
+        index: &[CodexRolloutIndexEntry],
+        metadata: HashMap<String, CodexThreadMetadata>,
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<(Option<LocalUsage>, Option<Vec<SessionSummary>>)> {
+        let Some(summaries) = self.load_local_summaries_from_index(index).await? else {
+            return Ok((None, None));
+        };
+        let skill_usages = make_skill_usages(&summaries);
+        let sessions = combine_session_metadata(summaries, metadata);
+        let local_usage = make_local_usage(sessions.clone(), now).map(|mut usage| {
+            usage.skill_usages = skill_usages;
+            usage
+        });
+        Ok((local_usage, Some(sessions)))
     }
 
     async fn load_local_summaries_internal(
         &self,
         data_root: impl AsRef<Path>,
     ) -> anyhow::Result<Option<Vec<CodexTranscriptSummary>>> {
-        let data_root = data_root.as_ref();
-        if !tokio::fs::try_exists(data_root).await.unwrap_or(false) {
+        let index = index_codex_rollout_files(data_root.as_ref()).await;
+        self.load_local_summaries_from_index(&index).await
+    }
+
+    async fn load_local_summaries_from_index(
+        &self,
+        index: &[CodexRolloutIndexEntry],
+    ) -> anyhow::Result<Option<Vec<CodexTranscriptSummary>>> {
+        if index.is_empty() {
             return Ok(None);
         }
-
-        let archived_dir = data_root.join("archived_sessions");
-        let sessions_dir = data_root.join("sessions");
-
-        let mut files = Vec::new();
-        if tokio::fs::try_exists(&archived_dir).await.unwrap_or(false) {
-            files.extend(enumerate_jsonl_files(&archived_dir).await);
-        }
-        if tokio::fs::try_exists(&sessions_dir).await.unwrap_or(false) {
-            files.extend(enumerate_jsonl_files(&sessions_dir).await);
-        }
-
-        if files.is_empty() {
-            return Ok(None);
-        }
-
-        files.sort();
-        files.dedup();
 
         let mut cache = self.read_cache().await;
-        let live_paths: HashSet<String> = files
+        let live_paths: HashSet<String> = index
             .iter()
-            .map(|f| f.to_string_lossy().to_string())
+            .map(|entry| entry.path.to_string_lossy().to_string())
             .collect();
         cache.entries.retain(|k, _| live_paths.contains(k));
 
         let mut summaries = Vec::new();
-        for file in files {
-            let fingerprint = fingerprint_for(&file).await;
+        for indexed in index {
+            let file = &indexed.path;
+            let fingerprint = indexed.fingerprint.as_ref();
             let key = file.to_string_lossy().to_string();
 
             if let Some(entry) = cache.entries.get(&key) {
-                if let Some(ref fp) = fingerprint {
+                if let Some(fp) = fingerprint {
                     if entry.matches(fp) {
                         summaries.push(entry.summary.clone());
                         continue;
@@ -212,7 +213,7 @@ impl CodexTranscriptReader {
                 }
             }
 
-            let summary = parse_transcript(&file, fingerprint.as_ref()).await;
+            let summary = parse_transcript(file, fingerprint).await;
             if let Some(fp) = fingerprint {
                 cache.entries.insert(
                     key,
@@ -346,7 +347,6 @@ async fn parse_transcript(
         tool_calls: HashMap::new(),
         skill_loads: Vec::new(),
         task_intervals: Vec::new(),
-        inference_calls: Vec::new(),
     };
 
     let data = match tokio::fs::read(file).await {
@@ -363,10 +363,6 @@ async fn parse_transcript(
     // Track the most recently observed model per turn so token_count events can
     // inherit it even if the turn_context appeared earlier in the file.
     let mut turn_models: HashMap<String, String> = HashMap::new();
-    // Explicit `task_complete` durations and `turn_context` effort hints, used
-    // to rebuild per-turn inference call samples after the parse loop.
-    let mut turn_durations: HashMap<String, i64> = HashMap::new();
-    let mut turn_efforts: HashMap<String, String> = HashMap::new();
 
     for line in data.split(|b| *b == b'\n') {
         if line.is_empty() || line.len() > MAX_LINE_BYTES {
@@ -409,11 +405,6 @@ async fn parse_transcript(
                 if let Some(ref m) = summary.model {
                     turn_models.insert(turn_id.clone(), m.clone());
                 }
-                if let Some(effort) = codex_string_value(payload.get("effort"))
-                    .or_else(|| codex_string_value(payload.get("reasoning_effort")))
-                {
-                    turn_efforts.insert(turn_id.clone(), effort);
-                }
             }
         }
 
@@ -427,14 +418,12 @@ async fn parse_transcript(
         // arguments, prompts, paths, or source contents.
         if envelope_type == Some("response_item") {
             if let Some(payload_type) = codex_string_value(payload.get("type")) {
-                if payload_type == "custom_tool_call" {
+                if payload_type == "function_call" || payload_type == "custom_tool_call" {
                     if let Some(name) = codex_string_value(payload.get("name")) {
                         if !name.is_empty() {
                             *summary.tool_calls.entry(name).or_insert(0) += 1;
                         }
                     }
-                }
-                if payload_type == "function_call" || payload_type == "custom_tool_call" {
                     summary
                         .skill_loads
                         .extend(safe_skill_loads_from_tool_payload(payload, Some(timestamp)));
@@ -463,13 +452,6 @@ async fn parse_transcript(
                     Some(t) => t,
                     None => continue,
                 };
-                if let Some(ref turn) = turn_id {
-                    if let Some(duration_ms) = codex_f64_value(payload.get("duration_ms")) {
-                        if duration_ms.is_finite() && duration_ms > 0.0 {
-                            turn_durations.insert(turn.clone(), duration_ms.trunc() as i64);
-                        }
-                    }
-                }
                 if let Some(ref turn) = turn_id {
                     if let Some(started_at) = started_tasks.remove(turn) {
                         summary.task_intervals.push(CodexTaskInterval {
@@ -545,96 +527,7 @@ async fn parse_transcript(
         });
     }
 
-    build_inference_samples(&mut summary, &turn_models, &turn_efforts, &turn_durations);
-
     summary
-}
-
-/// Rebuilds one `InferenceCallSample` per model turn from the parsed deltas,
-/// durations, and efforts. Deltas with an explicit `task_complete` duration
-/// prefer it; otherwise the corresponding `task_interval` is used. Turns with
-/// only an interval (no token event) produce zero-token samples; turns with a
-/// delta but no duration at all are skipped rather than estimated.
-fn build_inference_samples(
-    summary: &mut CodexTranscriptSummary,
-    turn_models: &HashMap<String, String>,
-    turn_efforts: &HashMap<String, String>,
-    turn_durations: &HashMap<String, i64>,
-) {
-    // Keep the most recent token event per turn (deltas are deduplicated by
-    // turn_id during parsing, so this is normally a single entry).
-    let mut latest_deltas: HashMap<String, &CodexUsageDelta> = HashMap::new();
-    for delta in &summary.deltas {
-        if let Some(turn_id) = &delta.turn_id {
-            let entry = latest_deltas.entry(turn_id.clone()).or_insert(delta);
-            if delta.date > entry.date {
-                *entry = delta;
-            }
-        }
-    }
-
-    for (turn_id, delta) in &latest_deltas {
-        let duration_ms = turn_durations
-            .get(turn_id)
-            .copied()
-            .or_else(|| interval_duration_ms(&summary.task_intervals, Some(turn_id)));
-        let Some(duration_ms) = duration_ms else {
-            continue;
-        };
-        summary.inference_calls.push(InferenceCallSample {
-            turn_id: Some(turn_id.clone()),
-            model: delta
-                .model
-                .clone()
-                .or_else(|| turn_models.get(turn_id).cloned()),
-            effort: turn_efforts.get(turn_id).cloned(),
-            duration_ms,
-            output_tokens: delta.tokens.output_tokens,
-            reasoning_output_tokens: delta.tokens.reasoning_output_tokens,
-            date: delta.date,
-        });
-    }
-
-    // Turns observed only as task intervals (no token event) still count as
-    // calls, attributed with zero output tokens.
-    for interval in &summary.task_intervals {
-        let Some(turn_id) = interval.turn_id.as_ref() else {
-            continue;
-        };
-        if latest_deltas.contains_key(turn_id) {
-            continue;
-        }
-        let duration_ms = interval
-            .ended_at
-            .signed_duration_since(interval.started_at)
-            .num_milliseconds();
-        if duration_ms <= 0 {
-            continue;
-        }
-        summary.inference_calls.push(InferenceCallSample {
-            turn_id: Some(turn_id.clone()),
-            model: turn_models
-                .get(turn_id)
-                .cloned()
-                .or_else(|| summary.model.clone()),
-            effort: turn_efforts.get(turn_id).cloned(),
-            duration_ms,
-            output_tokens: 0,
-            reasoning_output_tokens: 0,
-            date: interval.ended_at,
-        });
-    }
-}
-
-fn interval_duration_ms(intervals: &[CodexTaskInterval], turn_id: Option<&str>) -> Option<i64> {
-    let interval = intervals
-        .iter()
-        .find(|interval| interval.turn_id.as_deref() == turn_id)?;
-    let duration_ms = interval
-        .ended_at
-        .signed_duration_since(interval.started_at)
-        .num_milliseconds();
-    (duration_ms > 0).then_some(duration_ms)
 }
 
 #[derive(Debug)]
@@ -863,8 +756,7 @@ fn parse_usage(usage: &serde_json::Value) -> Option<TokenBreakdown> {
     let cached = codex_i64_value(usage.get("cached_input_tokens")).unwrap_or(0);
     let output = codex_i64_value(usage.get("output_tokens")).unwrap_or(0);
     let reasoning = codex_i64_value(usage.get("reasoning_output_tokens")).unwrap_or(0);
-    let total =
-        codex_i64_value(usage.get("total_tokens")).unwrap_or(input + output + reasoning);
+    let total = codex_i64_value(usage.get("total_tokens")).unwrap_or(input + output + reasoning);
 
     Some(TokenBreakdown {
         // Codex `input_tokens` already includes the cached portion, so cached
@@ -1062,6 +954,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn aggregates_function_and_custom_tool_calls_without_exposing_arguments() {
+        let temp = tempfile::tempdir().unwrap();
+        let archived = temp.path().join("archived_sessions");
+        tokio::fs::create_dir_all(&archived).await.unwrap();
+
+        let session = archived.join("rollout-mixed-tools.jsonl");
+        let private_argument = r#"{"cmd":"Get-Content 'C:\\Users\\private-user\\secret.txt'"}"#;
+        let lines = [
+            r#"{"timestamp":"2026-03-26T12:53:47.026Z","type":"session_meta","payload":{"id":"session-mixed","cwd":"h:\\project\\demo","model_provider":"openai"}}"#.to_string(),
+            r#"{"timestamp":"2026-03-26T12:53:47.164Z","type":"event_msg","payload":{"type":"token_count","turn_id":"turn-1","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":0,"output_tokens":50,"reasoning_output_tokens":0,"total_tokens":150}}}}"#.to_string(),
+            format!(
+                r#"{{"timestamp":"2026-03-26T12:53:48.000Z","type":"response_item","payload":{{"type":"function_call","name":"read_file","arguments":{}}}}}"#,
+                serde_json::to_string(private_argument).unwrap()
+            ),
+            r#"{"timestamp":"2026-03-26T12:53:49.000Z","type":"response_item","payload":{"type":"custom_tool_call","status":"completed","call_id":"call-2","name":"apply_patch","input":"replace private content"}}"#.to_string(),
+            r#"{"timestamp":"2026-03-26T12:53:50.000Z","type":"response_item","payload":{"type":"function_call","name":"read_file","arguments":"same tool, second event"}}"#.to_string(),
+        ];
+        tokio::fs::write(&session, lines.join("\n")).await.unwrap();
+
+        let cache = temp.path().join("cache");
+        let reader = CodexTranscriptReader::new(&cache);
+        let usage = reader
+            .load_local_usage(temp.path(), Utc::now())
+            .await
+            .unwrap()
+            .expect("should produce LocalUsage");
+
+        assert_eq!(usage.tool_usages.len(), 2);
+        assert_eq!(
+            usage
+                .tool_usages
+                .iter()
+                .find(|tool| tool.name == "read_file")
+                .map(|tool| tool.call_count),
+            Some(2)
+        );
+        assert_eq!(
+            usage
+                .tool_usages
+                .iter()
+                .find(|tool| tool.name == "apply_patch")
+                .map(|tool| tool.call_count),
+            Some(1)
+        );
+
+        let dashboard_json = serde_json::to_string(&usage).unwrap();
+        assert!(!dashboard_json.contains(private_argument));
+        assert!(!dashboard_json.contains("replace private content"));
+    }
+
+    #[tokio::test]
     async fn uses_last_token_usage_not_cumulative_total() {
         let temp = tempfile::tempdir().unwrap();
         let archived = temp.path().join("archived_sessions");
@@ -1158,7 +1101,9 @@ mod tests {
         // second re-reports the same usage; only one should be counted.
         let session = archived.join("rollout-dup-cum.jsonl");
         let event = r#"{"timestamp":"2026-03-26T12:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":80,"cached_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100},"total_token_usage":{"input_tokens":80,"cached_input_tokens":0,"output_tokens":20,"reasoning_output_tokens":0,"total_tokens":100}}}}"#;
-        tokio::fs::write(&session, format!("{event}\n{event}\n")).await.unwrap();
+        tokio::fs::write(&session, format!("{event}\n{event}\n"))
+            .await
+            .unwrap();
 
         let cache = temp.path().join("cache");
         let reader = CodexTranscriptReader::new(&cache);

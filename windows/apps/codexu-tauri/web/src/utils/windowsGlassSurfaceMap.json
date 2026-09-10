@@ -1,0 +1,90 @@
+{
+  "layers": [
+    {
+      "id": "window",
+      "tokenKey": "windowBg",
+      "cssVariable": "--window-bg",
+      "consumer": "body"
+    },
+    {
+      "id": "page",
+      "tokenKey": "pageBg",
+      "cssVariable": "--page-bg",
+      "consumer": ".windows-glass-page"
+    },
+    {
+      "id": "toolbar",
+      "tokenKey": "toolbarBg",
+      "cssVariable": "--toolbar-bg",
+      "consumer": ".glass-toolbar"
+    },
+    {
+      "id": "card",
+      "tokenKey": "cardBg",
+      "cssVariable": "--card-bg",
+      "consumer": ".glass-panel"
+    },
+    {
+      "id": "cardStrong",
+      "tokenKey": "cardBgStrong",
+      "cssVariable": "--card-bg-strong",
+      "consumer": ".glass-panel-strong"
+    },
+    {
+      "id": "control",
+      "tokenKey": "controlBg",
+      "cssVariable": "--control-bg",
+      "consumer": ".glass-button"
+    },
+    {
+      "id": "focus",
+      "tokenKey": "focusSurface",
+      "cssVariable": "--focus-surface",
+      "consumer": ":focus-visible"
+    },
+    {
+      "id": "status",
+      "tokenKey": "statusSurface",
+      "cssVariable": "--status-surface",
+      "consumer": ".dashboard-overview-status"
+    }
+  ],
+  "fallbacks": {
+    "cssBackdropFilter": {
+      "status": "source_contract",
+      "scope": "CSS @supports fallback for browsers without backdrop-filter",
+      "layers": [
+        {
+          "id": "window",
+          "selector": "body",
+          "cssVariable": "--glass-fallback-window-bg",
+          "opacity": "opaque"
+        },
+        {
+          "id": "page",
+          "selector": ".windows-glass-page",
+          "cssVariable": "--glass-fallback-page-bg",
+          "opacity": "opaque"
+        },
+        {
+          "id": "status",
+          "selector": ".dashboard-overview-status",
+          "cssVariable": "--glass-fallback-status-bg",
+          "opacity": "opaque"
+        }
+      ]
+    },
+    "nativeTransparency": {
+      "status": "not_observed_by_css_fallback",
+      "scope": "Tauri transparent window and OS compositor behavior require native capture evidence"
+    },
+    "dwmComposition": {
+      "status": "not_observed_by_css_fallback",
+      "scope": "DWM composition availability is not proven by CSS fallback"
+    },
+    "webview2Transparency": {
+      "status": "not_observed_by_css_fallback",
+      "scope": "WebView2 transparent composition is not proven by CSS fallback"
+    }
+  }
+}

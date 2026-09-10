@@ -12,6 +12,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::*;
 
+#[cfg(test)]
+thread_local! {
+    static JSONL_ENUMERATION_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static FINGERPRINT_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_rollout_io_counts() {
+    JSONL_ENUMERATION_COUNT.with(|count| count.set(0));
+    FINGERPRINT_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn rollout_io_counts() -> (usize, usize) {
+    (
+        JSONL_ENUMERATION_COUNT.with(std::cell::Cell::get),
+        FINGERPRINT_COUNT.with(std::cell::Cell::get),
+    )
+}
+
 pub const MAX_CACHE_BYTES: u64 = 128 * 1024 * 1024;
 pub const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
 pub const READ_CHUNK_BYTES: usize = 64 * 1024;
@@ -22,6 +42,13 @@ pub const CACHE_VERSION: i32 = 2;
 pub struct FileFingerprint {
     pub file_size: i64,
     pub modification_time_ns: Option<i64>,
+}
+
+/// One rollout path and the filesystem identity captured for a single refresh.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodexRolloutIndexEntry {
+    pub path: PathBuf,
+    pub fingerprint: Option<FileFingerprint>,
 }
 
 /// A single usage delta extracted from a transcript.
@@ -75,6 +102,9 @@ pub struct SessionSummary {
 
 /// Enumerates all `.jsonl` files under `root`, sorted.
 pub async fn enumerate_jsonl_files(root: &Path) -> Vec<PathBuf> {
+    #[cfg(test)]
+    JSONL_ENUMERATION_COUNT.with(|count| count.set(count.get() + 1));
+
     let mut files = Vec::new();
     let mut dirs = vec![root.to_path_buf()];
     while let Some(dir) = dirs.pop() {
@@ -109,6 +139,9 @@ pub async fn enumerate_jsonl_files(root: &Path) -> Vec<PathBuf> {
 
 /// Builds a file fingerprint from filesystem metadata.
 pub async fn fingerprint_for(path: &Path) -> Option<FileFingerprint> {
+    #[cfg(test)]
+    FINGERPRINT_COUNT.with(|count| count.set(count.get() + 1));
+
     let meta = tokio::fs::metadata(path).await.ok()?;
     let modified = meta.modified().ok()?;
     let duration = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
@@ -116,6 +149,28 @@ pub async fn fingerprint_for(path: &Path) -> Option<FileFingerprint> {
         file_size: meta.len() as i64,
         modification_time_ns: Some(duration.as_nanos() as i64),
     })
+}
+
+/// Enumerates and fingerprints the live and archived Codex rollouts once.
+pub async fn index_codex_rollout_files(codex_root: &Path) -> Vec<CodexRolloutIndexEntry> {
+    let mut paths = Vec::new();
+    for root in [
+        codex_root.join("archived_sessions"),
+        codex_root.join("sessions"),
+    ] {
+        if tokio::fs::try_exists(&root).await.unwrap_or(false) {
+            paths.extend(enumerate_jsonl_files(&root).await);
+        }
+    }
+    paths.sort();
+    paths.dedup();
+
+    let mut entries = Vec::with_capacity(paths.len());
+    for path in paths {
+        let fingerprint = fingerprint_for(&path).await;
+        entries.push(CodexRolloutIndexEntry { path, fingerprint });
+    }
+    entries
 }
 
 /// Aggregates a collection of session summaries into `LocalUsage`.
@@ -262,13 +317,13 @@ pub fn make_local_usage(summaries: Vec<SessionSummary>, now: DateTime<Utc>) -> O
         recent_threads,
         detailed_usage: Some(detailed),
         usage_trend: Some(usage_trend),
+        inference_performance: None,
         project_board: Some(ProjectBoard {
             recent_projects: project_usages.iter().take(8).cloned().collect(),
             all_projects: project_usages,
         }),
         tool_usages,
         skill_usages: Vec::new(), // TODO: implement skill resolver
-        inference_performance: None,
     };
 
     Some(usage)

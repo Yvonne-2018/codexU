@@ -1,6 +1,5 @@
 import { Activity, Calendar, Coins, TrendingUp, type LucideIcon } from 'lucide-react';
 import type {
-  InferencePerformance,
   ModelUsageTrend,
   PricedTokenUsage,
   TokenBreakdown,
@@ -12,6 +11,7 @@ import { UsageHeatmap } from './UsageHeatmap';
 import { TokenBarChart } from './TokenBarChart';
 import { ThreadList } from './ThreadList';
 import { useI18n } from '../i18n/I18nProvider';
+import { formatQuantity } from '../utils/formatQuantity';
 
 interface UsagePanelProps {
   usage: LocalUsage | null | undefined;
@@ -28,11 +28,9 @@ export function UsagePanel({ usage }: UsagePanelProps) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-tertiary">{t('usage.title')}</p>
           <h2 className="mt-1 text-lg font-semibold text-primary">{t('usage.localTokenActivity')}</h2>
-          <p className="mt-1 text-sm text-secondary">{t('usage.localDetail')}</p>
         </div>
         <div className="usage-panel-source">
           <span className="usage-source-chip">{sourceQualityLabel(trend?.source_quality, t)}</span>
-          <span className="text-xs text-tertiary">{t('usage.notOfficial')}</span>
         </div>
       </div>
 
@@ -73,8 +71,6 @@ export function UsagePanel({ usage }: UsagePanelProps) {
         <ThreadList threads={usage?.recent_threads ?? []} />
       </div>
 
-      <InferencePerformanceCard performance={usage?.inference_performance ?? null} t={t} />
-
       <ModelTrendsCard trends={trend?.model_trends ?? null} t={t} />
 
       <div className="glass-panel px-4 py-3 sm:px-5 usage-panel-note" role="note">
@@ -114,7 +110,7 @@ function UsageMetricCard({ label, icon: Icon, usage, fallbackTokens, accent, t }
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-secondary">{label}</p>
-          <p className="mt-1 text-2xl font-semibold text-primary tabular-nums">{formatTokens(value)}</p>
+          <p className="mt-1 text-2xl font-semibold text-primary tabular-nums">{formatQuantity(value)}</p>
         </div>
         <span className={`p-2 rounded-lg border border-current/20 ${accentClass}`} aria-hidden="true">
           <Icon size={17} />
@@ -145,7 +141,7 @@ function TokenBreakdownBar({ tokens, t }: { tokens: TokenBreakdown | null; t: Re
         <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-tertiary">
           {segments.map((segment) => (
             <span key={segment.label} className="min-w-0 truncate">
-              {segment.label} {formatTokens(segment.value)}
+              {segment.label} {formatQuantity(segment.value)}
             </span>
           ))}
         </div>
@@ -174,11 +170,6 @@ function visibleTotalTokens(tokens: TokenBreakdown): number {
   return Math.max(tokens.total_tokens, tokens.input_tokens + tokens.output_tokens);
 }
 
-function formatTokens(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '--';
-  return Math.round(value).toLocaleString();
-}
-
 function formatUSD(value: number): string {
   if (!Number.isFinite(value)) return '--';
   return value.toFixed(2);
@@ -188,67 +179,6 @@ function sourceQualityLabel(value: 'detailed' | 'approximate' | null | undefined
   if (value === 'detailed') return t('usage.detailedEvents');
   if (value === 'approximate') return t('usage.threadFallback');
   return t('usage.noSourceYet');
-}
-
-interface InferencePerformanceCardProps {
-  performance: InferencePerformance | null;
-  t: ReturnType<typeof useI18n>['t'];
-}
-
-function InferencePerformanceCard({ performance, t }: InferencePerformanceCardProps) {
-  const models = performance?.models ?? [];
-  return (
-    <section className="glass-panel p-4 sm:p-5" aria-label={t('usage.inferenceTitle')}>
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <h3 className="text-sm font-semibold text-primary">{t('usage.inferenceTitle')}</h3>
-          <p className="mt-0.5 text-xs text-tertiary">{t('usage.inferenceEmptyDetail')}</p>
-        </div>
-        {performance?.refreshed_at ? (
-          <span className="shrink-0 text-xs text-tertiary tabular-nums">
-            {new Date(performance.refreshed_at).toLocaleString()}
-          </span>
-        ) : null}
-      </div>
-      {models.length === 0 ? (
-        <p className="text-sm text-secondary">{t('usage.inferenceEmpty')}</p>
-      ) : (
-        <div className="space-y-3">
-          {models.map((model, index) => (
-            <div key={index} className="rounded-xl border border-theme bg-surface-inset p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium text-primary truncate">
-                  {model.model ?? t('common.unknown')}
-                  {model.effort ? (
-                    <span className="ml-1.5 text-xs text-tertiary capitalize">({model.effort})</span>
-                  ) : null}
-                </p>
-                <span className="text-xs text-secondary tabular-nums">
-                  {formatTokens(model.call_count)} {t('usage.inferenceCalls')}
-                </span>
-              </div>
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2 text-xs">
-                <Stat label={t('usage.inferenceAvgDuration')} value={formatDuration(model.average_duration_ms)} />
-                <Stat label="P50" value={formatDuration(model.p50_duration_ms)} />
-                <Stat label="P90" value={formatDuration(model.p90_duration_ms)} />
-                <Stat label={t('usage.inferenceThroughput')} value={formatTokens(model.average_tokens_per_second)} />
-                <Stat label={t('usage.inferenceReasoningRatio')} value={formatPercent(model.reasoning_output_ratio)} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-surface-elevated px-2.5 py-1.5">
-      <p className="text-[10px] uppercase tracking-wide text-tertiary truncate">{label}</p>
-      <p className="mt-0.5 text-sm font-medium text-primary tabular-nums">{value}</p>
-    </div>
-  );
 }
 
 interface ModelTrendsCardProps {
@@ -276,7 +206,7 @@ function ModelTrendsCard({ trends, t }: ModelTrendsCardProps) {
                 <p className="text-sm font-medium text-primary truncate">{model.model}</p>
                 <p className="mt-0.5 text-xs text-tertiary tabular-nums">
                   {t('usage.activeDays', { value: model.active_day_count })} · {t('usage.dailyAverage')}{' '}
-                  {formatTokens(model.summary.daily_average_tokens)}
+                  {formatQuantity(model.summary.daily_average_tokens)}
                 </p>
               </div>
               <ModelSparkline values={lastSevenDayTokens(model.day_buckets)} />
@@ -324,15 +254,4 @@ function lastSevenDayTokens(buckets: UsageDayBucket[]): number[] {
   return buckets
     .filter((bucket) => bucket.date >= cutoff)
     .map((bucket) => visibleTotalTokens(bucket.usage.tokens));
-}
-
-function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms)) return '--';
-  if (ms >= 60000) return `${(ms / 60000).toFixed(1)} min`;
-  return `${(ms / 1000).toFixed(1)} s`;
-}
-
-function formatPercent(ratio: number): string {
-  if (!Number.isFinite(ratio)) return '--';
-  return `${(ratio * 100).toFixed(0)}%`;
 }

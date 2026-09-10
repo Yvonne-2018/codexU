@@ -16,16 +16,16 @@ test('keeps one macOS-ordered Dashboard tab system and relegates Leadership to i
   assert.doesNotMatch(dashboard, /type DashboardTab\s*=/);
   assert.doesNotMatch(dashboard, /<LeadershipPanel\b/);
   assert.doesNotMatch(dashboard, /<ThreadList\b/);
-  assert.match(dashboard, /<DashboardHome[\s\S]*?snapshot=\{dashboard\?\.codex\?\.snapshot\}/);
+  assert.match(dashboard, /<DashboardHome[\s\S]*?snapshot=\{(?:dashboard\?\.codex\?\.snapshot|activeSnapshot)\}/);
 
   assert.match(
     home,
-    /type DashboardContentTab\s*=\s*'tasks'\s*\|\s*'leadership'\s*\|\s*'usage'\s*\|\s*'projects'\s*\|\s*'skills'/,
+    /type DashboardContentTab\s*=\s*'tasks'\s*\|\s*'leadership'\s*\|\s*'usage'\s*\|\s*'inference'\s*\|\s*'projects'\s*\|\s*'skills'/,
   );
   assert.match(home, /useState<DashboardContentTab>\('tasks'\)/);
   assert.match(
     home,
-    /\{ id: 'tasks', title: 'Tasks', titleKey: 'dashboard\.tabs\.tasks' \}[\s\S]*\{ id: 'leadership', title: 'AI Leadership', titleKey: 'dashboard\.tabs\.leadership' \}[\s\S]*\{ id: 'usage', title: 'Usage', titleKey: 'dashboard\.tabs\.usage' \}[\s\S]*\{ id: 'projects', title: 'Projects', titleKey: 'dashboard\.tabs\.projects' \}[\s\S]*\{ id: 'skills', title: 'Skills', titleKey: 'dashboard\.tabs\.skills' \}/,
+    /\{ id: 'tasks', title: 'Tasks', titleKey: 'dashboard\.tabs\.tasks' \}[\s\S]*\{ id: 'leadership', title: 'AI Leadership', titleKey: 'dashboard\.tabs\.leadership' \}[\s\S]*\{ id: 'usage', title: 'Usage', titleKey: 'dashboard\.tabs\.usage' \}[\s\S]*\{ id: 'inference', title: 'Inference', titleKey: 'dashboard\.tabs\.inference' \}[\s\S]*\{ id: 'projects', title: 'Projects', titleKey: 'dashboard\.tabs\.projects' \}[\s\S]*\{ id: 'skills', title: 'Skills', titleKey: 'dashboard\.tabs\.skills' \}/,
   );
   assert.match(home, /useI18n/);
   assert.match(home, /activeDashboardTab === 'leadership'[\s\S]*?<LeadershipPanel signal=\{signal\}/);

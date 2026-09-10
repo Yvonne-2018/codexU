@@ -6,6 +6,7 @@ import {
   isTauriRuntimeAvailable,
   requireTauriRuntime,
 } from '../utils/tauri';
+import { getVisualTestData } from '../types/visualTest';
 
 export function useUsage() {
   const [dashboard, setDashboard] = useState<CodexDashboardSnapshot | null | undefined>(undefined);
@@ -29,6 +30,13 @@ export function useUsage() {
   }, []);
 
 useEffect(() => {
+  const visualDashboard = getVisualTestData()?.dashboard;
+  if (visualDashboard) {
+    setDashboard(visualDashboard);
+    setLoading(false);
+    return;
+  }
+
   load();
 
   if (!isTauriRuntimeAvailable()) {

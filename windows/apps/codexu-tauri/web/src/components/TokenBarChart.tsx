@@ -9,11 +9,11 @@ import {
 } from 'recharts';
 import type { DailyTokenBucket } from '../types/models';
 import { useI18n } from '../i18n/I18nProvider';
+import { formatQuantity } from '../utils/formatQuantity';
 
 interface TokenBarChartProps {
   data: DailyTokenBucket[];
 }
-
 export function TokenBarChart({ data }: TokenBarChartProps) {
   const { t } = useI18n();
   const chartData = data.map((d) => ({
@@ -38,7 +38,7 @@ export function TokenBarChart({ data }: TokenBarChartProps) {
               tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v: number) => formatCompact(v)}
+              tickFormatter={(v: number) => formatQuantity(v)}
             />
             <Tooltip
               cursor={{ fill: 'var(--surface-inset)' }}
@@ -48,7 +48,7 @@ export function TokenBarChart({ data }: TokenBarChartProps) {
                 borderRadius: '8px',
                 color: 'var(--text-primary)',
               }}
-              formatter={(value: number) => [formatNumber(value), t('usage.tokenLabel')]}
+                formatter={(value: number) => [formatQuantity(value), t('usage.tokenLabel')]}
             />
             <Bar dataKey="tokens" fill="var(--data-primary)" radius={[4, 4, 0, 0]} />
           </BarChart>
@@ -56,14 +56,4 @@ export function TokenBarChart({ data }: TokenBarChartProps) {
       </div>
     </div>
   );
-}
-
-function formatCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
-
-function formatNumber(n: number): string {
-  return n.toLocaleString();
 }

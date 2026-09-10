@@ -22,12 +22,19 @@ test('keeps Projects focused on the macOS ranking and activity hierarchy', async
   assert.match(board, /source_quality/);
   assert.match(board, /useI18n/);
   assert.match(board, /projects\.noRecords/);
-  assert.doesNotMatch(board, /full_path/);
+  assert.match(board, /full_path/);
+  assert.match(board, /tabIndex=\{0\}/);
+  assert.match(board, /aria-label=\{`project full path:/);
+  assert.match(board, /grid-cols-\[.*1fr.*auto\]/);
 
   assert.match(panel, /ProjectBoard/);
   assert.match(panel, /ProjectActivityOverview/);
   assert.match(panel, /projectBoard/);
+  assert.doesNotMatch(panel, /ToolUsageList/);
+  assert.doesNotMatch(panel, /tools/);
 
-  assert.match(home, /<ProjectsPanel\s+projectBoard=\{usage\?\.project_board \?\? null\}/);
+  const projectsInvocation = home.match(/<ProjectsPanel[\s\S]*?\/>/)?.[0] ?? '';
+  assert.match(projectsInvocation, /projectBoard=\{usage\?\.project_board \?\? null\}/);
+  assert.doesNotMatch(projectsInvocation, /tools=/);
   assert.doesNotMatch(home, /<ProjectsPanel[\s\S]*projects=\{usage\?\.project_board\?\.recent_projects/);
 });

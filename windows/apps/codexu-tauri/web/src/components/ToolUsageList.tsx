@@ -1,11 +1,11 @@
 import { Wrench } from 'lucide-react';
 import type { ToolUsage } from '../types/models';
 import { useI18n } from '../i18n/I18nProvider';
+import { formatQuantity } from '../utils/formatQuantity';
 
 interface ToolUsageListProps {
   tools: ToolUsage[];
 }
-
 export function ToolUsageList({ tools }: ToolUsageListProps) {
   const { t } = useI18n();
   if (tools.length === 0) {
@@ -26,22 +26,25 @@ export function ToolUsageList({ tools }: ToolUsageListProps) {
         <span className="text-xs text-tertiary">{t('projects.total', { count: tools.length })}</span>
       </div>
       <div className="space-y-3">
-        {tools.map((t) => (
-          <div key={t.id} className="space-y-1">
+        {tools.map((tool) => (
+          <div key={tool.id} className="space-y-1">
             <div className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2">
                 <Wrench size={14} className="text-secondary" />
-                <span className="font-medium text-primary">{t.name}</span>
+                <span className="font-medium text-primary">{tool.name}</span>
                 <span className="text-xs px-1.5 py-0.5 rounded chip-like bg-surface-inset text-tertiary capitalize">
-                  {t.category}
+                  {tool.category}
                 </span>
               </div>
-              <span className="text-secondary">{formatNumber(t.call_count)}</span>
+              <span className="text-secondary">{formatQuantity(tool.call_count)}</span>
             </div>
+            <span className="text-xs text-tertiary">
+              {t('projects.estimatedTokens', { value: formatQuantity(tool.estimated_tokens) })}
+            </span>
             <div className="h-2 w-full bg-surface-inset rounded-full overflow-hidden">
               <div
                 className="h-full bg-data-tertiary rounded-full"
-                style={{ width: `${(t.call_count / maxCalls) * 100}%` }}
+                style={{ width: `${(tool.call_count / maxCalls) * 100}%` }}
               />
             </div>
           </div>
@@ -49,8 +52,4 @@ export function ToolUsageList({ tools }: ToolUsageListProps) {
       </div>
     </div>
   );
-}
-
-function formatNumber(n: number): string {
-  return n.toLocaleString();
 }

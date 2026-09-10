@@ -49,7 +49,7 @@ function App() {
 function ErrorFallback({ error }: { error: Error | null }) {
   const { t } = useI18n();
   return (
-    <div className="h-screen p-4 bg-transparent text-primary box-border">
+    <div className="h-screen p-4 windows-glass-page text-primary box-border">
       <div className="mx-auto max-w-2xl glass-panel p-4">
         <h2 className="text-lg font-semibold mb-2">{t('common.applicationError')}</h2>
         <pre className="text-sm whitespace-pre-wrap break-words bg-surface-inset rounded-lg border border-theme p-3">
