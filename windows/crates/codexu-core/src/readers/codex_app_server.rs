@@ -19,10 +19,8 @@ const MONTHLY_MAX_DURATION_MINS: i64 = 31 * 24 * 60;
 const APP_SERVER_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const APP_SERVER_REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
 
-/// `CREATE_NO_WINDOW`: prevents the console-subsystem Codex CLI from flashing a
-/// terminal window when spawned from the GUI host (e.g. on each auto-refresh).
 #[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Official rate-limit data read from the local Codex app-server.
 #[derive(Debug, Clone, PartialEq)]
@@ -296,7 +294,7 @@ fn configure_no_console(command: &mut Command) {
 #[cfg(not(windows))]
 fn configure_no_console(_command: &mut Command) {}
 
-pub(crate) fn resolve_codex_executable() -> Option<PathBuf> {
+fn resolve_codex_executable() -> Option<PathBuf> {
     let mut candidates = Vec::new();
 
     if let Some(user_profile) = env::var_os("USERPROFILE") {

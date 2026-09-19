@@ -2,7 +2,17 @@
 
 ## Unreleased
 
-## 0.2.0 - 2026-08-13
+- fork：合并上游 v1.3.1（官方 Windows V0 Dashboard、app-server `CREATE_NO_WINDOW`、推理聚合边界修复），重叠的手工移植实现以官方为准；保留 fork 独有功能（官方额度查询开关、Claude Code 用量/任务板整合、Codex 实时任务状态、托盘额度菜单、系统集成、CLI `--dump-json`）。Windows 工程版本统一对齐 1.3.1。
+
+## 1.3.1 - 2026-09-01
+
+- 完成独立 Windows x86_64 Tauri Dashboard V0：Overview、Tasks、AI Leadership、Usage、Inference、Projects、Skills 和 Settings 八个 Web surface 统一接入本地数据管线。
+- Windows app-server 子进程启动使用 `CREATE_NO_WINDOW`，首次打开或点击 Refresh 时不再弹出 CMD/命令行窗口，同时保留额度读取、loopback 请求和子进程清理行为。
+- Windows 版本继续保持本地优先和隐私边界，只读取本机 Codex transcript、SQLite 与 automation 元数据；不上传 usage、线程、路径、日志或账户数据。
+- 推理性能聚合补齐本地统计时区、DST 边界、有界流式读取、指纹缓存和共享刷新索引；缺失或非法事件不伪造成有效样本。
+- 固化 Windows glass surface、Playwright 合同/fixture、native exact-HWND 采集边界、shell lifecycle 检查和 MSI/NSIS 发布脚本校验。
+
+## 0.2.0 - 2026-08-13（fork 独有，功能已被上游 1.3.1 覆盖者以官方实现为准）
 
 - Windows 版补齐 macOS 已具备的看板数据面：任务看板新增 Codex 实时任务状态（app-server thread/list 轮询合并 running/idle/failed 线程）与 Claude Code 任务（`~/.claude/tasks`）读取。
 - 新增本机推理性能监测：从 Codex transcripts 重建模型调用边界，按模型与推理强度展示平均耗时、P50、P90、有效吞吐与 reasoning token 占比；缓存版本升级以触发旧用户重新解析。

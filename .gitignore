@@ -37,3 +37,10 @@ explore/
 # Private local visual-acceptance artifacts (screenshots, logs, and capture helpers)
 /.local-artifacts/
 .claude/
+
+# Local WorkBlock runtime state remains available to project skills but is never committed.
+/.workblock/runtime/
+
+# Local planning state
+/.planning/
+/.workblock/

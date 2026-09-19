@@ -5,6 +5,18 @@ param(
   [string] $OutputRoot,
   [switch] $PreflightOnly,
   [switch] $SkipBuild,
+  [switch] $Matrix,
+  [ValidateSet('system', 'light', 'dark')]
+  [string[]] $Theme = @(),
+  [ValidateSet(
+    'codexu.default',
+    'codexu.blue-white-porcelain',
+    'codexu.dunhuang-apsara',
+    'codexu.forbidden-city-red',
+    'codexu.orchid-dawn',
+    'codexu.thousand-li-landscape'
+  )]
+  [string[]] $Palette = @(),
   [Alias('Surface')]
   [ValidateSet('All', 'Overview', 'Tasks', 'AI Leadership', 'Usage', 'Projects', 'Skills')]
   [string] $RequestedSurface = 'All'
@@ -22,6 +34,21 @@ $captureRuns = @('fullscreen')
 $segmentOverlapRatio = 0.2
 $maxSegmentsPerSurface = 12
 $surfaceFilePattern = '<surface>-<segment:00>.png'
+$representativeMatrixThemes = @('light', 'dark')
+$representativeMatrixPalettes = @(
+  [ordered]@{
+    palette_id = 'codexu.default'
+    role = 'default'
+  },
+  [ordered]@{
+    palette_id = 'codexu.blue-white-porcelain'
+    role = 'representative-cool'
+  },
+  [ordered]@{
+    palette_id = 'codexu.dunhuang-apsara'
+    role = 'representative-warm'
+  }
+)
 $surfaces = @(
   [ordered]@{
     name = 'Tasks'
@@ -68,6 +95,99 @@ if ($captureOverview) {
 }
 $requestedSurfaces += @($selectedPanelSurfaces | ForEach-Object { $_.name })
 $singlePanelCapture = $RequestedSurface -notin @('All', 'Overview')
+$visualMatrixRequested = (
+  [bool]$Matrix -or
+  $PSBoundParameters.ContainsKey('Theme') -or
+  $PSBoundParameters.ContainsKey('Palette')
+)
+$selectedThemes = if ($Theme.Count -gt 0) {
+  @($Theme)
+} elseif ($visualMatrixRequested) {
+  @($representativeMatrixThemes)
+} else {
+  @('system')
+}
+$selectedPalettes = if ($Palette.Count -gt 0) {
+  @(
+    $Palette | ForEach-Object {
+      [ordered]@{
+        palette_id = $_
+        role = if ($_ -eq 'codexu.default') { 'default' } else { 'requested' }
+      }
+    }
+  )
+} elseif ($visualMatrixRequested) {
+  @($representativeMatrixPalettes)
+} else {
+  @(
+    [ordered]@{
+      palette_id = 'codexu.default'
+      role = 'default'
+    }
+  )
+}
+
+function Get-Slug {
+  param([string] $Value)
+  return ($Value -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant()
+}
+
+function Get-VisualMatrixCells {
+  $cells = @()
+  foreach ($themeValue in $selectedThemes) {
+    foreach ($paletteValue in $selectedPalettes) {
+      $paletteId = [string]$paletteValue.palette_id
+      $role = [string]$paletteValue.role
+      $cells += [ordered]@{
+        id = ((Get-Slug -Value $themeValue) + '-' + (Get-Slug -Value $paletteId))
+        theme = $themeValue
+        palette_id = $paletteId
+        palette_role = $role
+      }
+    }
+  }
+  return @($cells)
+}
+
+$visualMatrixCells = @(Get-VisualMatrixCells)
+
+function Get-OsMatrixObservation {
+  $version = [Environment]::OSVersion.Version
+  $productName = $null
+  try {
+    $productName = (
+      Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+    ).ProductName
+  } catch {
+    $productName = 'unknown'
+  }
+  $isWindows11 = ($version.Major -eq 10 -and $version.Build -ge 22000)
+  $isWindows10 = ($version.Major -eq 10 -and $version.Build -lt 22000)
+  return [ordered]@{
+    current_host = [ordered]@{
+      product_name = $productName
+      version = $version.ToString()
+      build = $version.Build
+    }
+    windows_10 = [ordered]@{
+      status = if ($isWindows10) { 'OBSERVED' } else { 'NOT OBSERVED' }
+      reason = if ($isWindows10) { 'current native host' } else { 'current native host is not Windows 10' }
+    }
+    windows_11 = [ordered]@{
+      status = if ($isWindows11) { 'OBSERVED' } else { 'NOT OBSERVED' }
+      reason = if ($isWindows11) { 'current native host' } else { 'current native host is not Windows 11' }
+    }
+  }
+}
+
+function Get-FallbackBoundary {
+  return [ordered]@{
+    css_backdrop_filter_fallback = 'source-level CSS fallback only'
+    native_transparency_fallback = 'NOT OBSERVED by CSS fallback'
+    dwm_composition_fallback = 'NOT OBSERVED by CSS fallback'
+    webview2_transparency_fallback = 'NOT OBSERVED by CSS fallback'
+  }
+}
 
 function Get-NormalizedOutputRoot {
   param([string] $RequestedPath)
@@ -626,6 +746,19 @@ function Get-PreflightManifest {
     capture_runs = @($captureRuns)
     client_sizes = @()
     surfaces = @($requestedSurfaces)
+    visual_matrix = [ordered]@{
+      enabled = [bool]$visualMatrixRequested
+      requested_cells = @($visualMatrixCells)
+      current_host_execution = if ($visualMatrixRequested) {
+        'executable via capture workflow on current Windows host'
+      } else {
+        'single default settings cell'
+      }
+    }
+    settings_injection = 'task-local app_data_dir selected per matrix cell'
+    settings_restore_policy = 'no user settings touched'
+    os_matrix = Get-OsMatrixObservation
+    fallback_boundary = Get-FallbackBoundary
     window_mode = 'maximized exact HWND'
     overview_file = if ($captureOverview) { 'fullscreen/overview.png' } else { $null }
     surface_capture_mode = if ($singlePanelCapture) {
@@ -1352,15 +1485,50 @@ function Save-WorkflowManifest {
   }
 }
 
+function Write-CaptureSettings {
+  param(
+    [string] $AppData,
+    [string] $LocalAppData,
+    [string] $ThemeValue,
+    [string] $PaletteId
+  )
+
+  $userProfile = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+  $config = [ordered]@{
+    codex_root = Join-Path $userProfile '.codex'
+    cache_dir = Join-Path $LocalAppData 'codexU-cache'
+    theme = $ThemeValue
+    palette_id = $PaletteId
+    refresh_interval_secs = 60
+    tray_density = 'classic'
+    language = 'en'
+  }
+  $settingsJson = $config | ConvertTo-Json -Depth 5
+  $settingsDirectory = Join-Path $AppData 'com.codexU.app'
+  New-Item -ItemType Directory -Path $settingsDirectory -Force | Out-Null
+  $settingsPath = Join-Path $settingsDirectory 'settings.json'
+  [System.IO.File]::WriteAllText(
+    $settingsPath,
+    $settingsJson,
+    [System.Text.UTF8Encoding]::new($false)
+  )
+  return $settingsPath
+}
+
 function Invoke-MaximizedCapture {
   param(
     [string] $CaptureTool,
     [string] $ScreenshotsRoot,
     [string] $RuntimeRoot,
-    [string] $LogsRoot
+    [string] $LogsRoot,
+    [System.Collections.IDictionary] $MatrixCell
   )
 
-  $label = 'fullscreen'
+  $label = if ([bool]$visualMatrixRequested) {
+    'fullscreen-' + [string]$MatrixCell.id
+  } else {
+    'fullscreen'
+  }
   $sizeScreenshots = Join-Path $ScreenshotsRoot $label
   $sizeRuntime = Join-Path $RuntimeRoot $label
   New-Item -ItemType Directory -Path $sizeScreenshots, $sizeRuntime | Out-Null
@@ -1368,12 +1536,21 @@ function Invoke-MaximizedCapture {
   $sizeRecord = [ordered]@{
     run = $label
     status = 'starting'
+    matrix_cell_id = if ([bool]$visualMatrixRequested) { [string]$MatrixCell.id } else { $null }
+    theme = [string]$MatrixCell.theme
+    palette_id = [string]$MatrixCell.palette_id
+    palette_role = [string]$MatrixCell.palette_role
+    settings_files = @()
     window = $null
     captures = @()
     process_records = @()
     cleanup = $null
   }
-  $script:workflowManifest.fullscreen_run = $sizeRecord
+  if ([bool]$visualMatrixRequested) {
+    [void]$script:workflowManifest.matrix_runs.Add($sizeRecord)
+  } else {
+    $script:workflowManifest.fullscreen_run = $sizeRecord
+  }
   Save-WorkflowManifest
 
   $process = $null
@@ -1381,11 +1558,20 @@ function Invoke-MaximizedCapture {
   $stderrTask = $null
   $records = [System.Collections.ArrayList]::new()
   $foregroundBefore = [NativeVisualCaptureDriver]::GetForegroundWindowHandle()
+  $cleanupFailure = $false
   try {
     $appData = Join-Path $sizeRuntime 'appdata'
     $localAppData = Join-Path $sizeRuntime 'localappdata'
     $webViewData = Join-Path $sizeRuntime 'webview2'
     New-Item -ItemType Directory -Path $appData, $localAppData, $webViewData | Out-Null
+    $taskLocalSettings = Write-CaptureSettings `
+      -AppData $appData `
+      -LocalAppData $localAppData `
+      -ThemeValue ([string]$MatrixCell.theme) `
+      -PaletteId ([string]$MatrixCell.palette_id)
+    $captureAppDataDir = Split-Path -Parent $taskLocalSettings
+    $sizeRecord.settings_files = @($taskLocalSettings)
+    Save-WorkflowManifest
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $appPath
@@ -1399,6 +1585,7 @@ function Invoke-MaximizedCapture {
     $startInfo.EnvironmentVariables['APPDATA'] = $appData
     $startInfo.EnvironmentVariables['LOCALAPPDATA'] = $localAppData
     $startInfo.EnvironmentVariables['WEBVIEW2_USER_DATA_FOLDER'] = $webViewData
+    $startInfo.EnvironmentVariables['CODEXU_CAPTURE_APP_DATA_DIR'] = $captureAppDataDir
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
@@ -1496,12 +1683,15 @@ function Invoke-MaximizedCapture {
       }
       if ($sizeRecord.cleanup.remaining_matching_process_ids.Count -gt 0) {
         $sizeRecord.status = 'cleanup-failed'
-        Save-WorkflowManifest
-        throw "Task-owned processes remained after the $label capture."
+        $cleanupFailure = $true
       }
       if ($sizeRecord.status -eq 'captured') {
         $sizeRecord.status = 'complete'
       }
+    }
+    if ($cleanupFailure) {
+      Save-WorkflowManifest
+      throw "Task-owned processes remained after the $label capture."
     }
     Save-WorkflowManifest
   }
@@ -1559,14 +1749,20 @@ $script:workflowManifest = [ordered]@{
   capture_argument = '--codexu-native-capture-background'
   taskbar_policy = 'excluded'
   alt_tab_policy = 'excluded'
+  visual_matrix = $preflight.visual_matrix
+  os_matrix = $preflight.os_matrix
+  fallback_boundary = $preflight.fallback_boundary
   real_local_codex_input = 'read-only'
-  app_runtime_storage = 'task-local under .local-artifacts'
+  app_runtime_storage = 'task-local app data, cache, and WebView2 under .local-artifacts'
+  settings_injection = $preflight.settings_injection
+  settings_restore_policy = $preflight.settings_restore_policy
   build = [ordered]@{
     command = $preflight.build_command
     skipped = [bool]$SkipBuild
     result = 'pending'
   }
   fullscreen_run = $null
+  matrix_runs = [System.Collections.ArrayList]::new()
   size_runs = @()
   screenshot_count = 0
   final_process_cleanup = 'pending'
@@ -1618,11 +1814,14 @@ try {
     throw 'The exact target release executable became active before capture; refusing to manage it.'
   }
 
-  Invoke-MaximizedCapture `
-    -CaptureTool $captureTool `
-    -ScreenshotsRoot $screenshotsRoot `
-    -RuntimeRoot $runtimeRoot `
-    -LogsRoot $logsRoot
+  foreach ($matrixCell in $visualMatrixCells) {
+    Invoke-MaximizedCapture `
+      -CaptureTool $captureTool `
+      -ScreenshotsRoot $screenshotsRoot `
+      -RuntimeRoot $runtimeRoot `
+      -LogsRoot $logsRoot `
+      -MatrixCell $matrixCell
+  }
 
   $pngFiles = @(
     Get-ChildItem -LiteralPath $screenshotsRoot -Filter '*.png' -File -Recurse
@@ -1630,65 +1829,83 @@ try {
   if (@($script:workflowManifest.size_runs).Count -ne 0) {
     throw 'Native capture unexpectedly recorded a fixed client-size run.'
   }
-  $fullscreenRun = $script:workflowManifest.fullscreen_run
-  if (
-    $null -eq $fullscreenRun -or
-    $fullscreenRun.status -ne 'complete' -or
-    -not [bool]$fullscreenRun.window.maximized
-  ) {
-    throw 'Native capture did not complete one maximized exact-HWND run.'
+  if ([bool]$visualMatrixRequested) {
+    $completedRuns = @($script:workflowManifest.matrix_runs.ToArray())
+  } else {
+    $completedRuns = @($script:workflowManifest.fullscreen_run)
   }
-  $overviewCaptureCount = @(
-    $fullscreenRun.captures | Where-Object { $_.surface -eq 'Overview' }
-  ).Count
-  if ($captureOverview -and $overviewCaptureCount -ne 1) {
-    throw 'Native capture did not complete exactly one requested Overview capture.'
-  }
-  if (-not $captureOverview -and $overviewCaptureCount -ne 0) {
-    throw 'Native capture recorded an unrequested Overview capture.'
-  }
-  $unexpectedCaptures = @(
-    $fullscreenRun.captures |
-      Where-Object { $requestedSurfaces -notcontains $_.surface }
-  )
-  if ($unexpectedCaptures.Count -ne 0) {
-    throw 'Native capture recorded an unrequested Dashboard surface.'
-  }
-  $recordedCaptureCount = @($fullscreenRun.captures).Count
-  foreach ($surface in $selectedPanelSurfaces) {
-    $surfaceCaptures = @(
-      $fullscreenRun.captures | Where-Object { $_.surface -eq $surface.name }
+  $expectedMatrixRunCount = @($visualMatrixCells).Count
+  if ($completedRuns.Count -ne $expectedMatrixRunCount) {
+    $script:workflowManifest.matrix_count_diagnostic = (
+      'Native capture did not record the requested visual matrix run count. ' +
+      "visual_matrix_requested=$([bool]$visualMatrixRequested);" +
+      "expected=$expectedMatrixRunCount;actual=$($completedRuns.Count);" +
+      "matrix_manifest_count=$(@($script:workflowManifest.matrix_runs).Count)"
     )
-    if ($surfaceCaptures.Count -lt 1) {
-      throw "Maximized run did not record $($surface.name) coverage."
-    }
-    $actualSegments = @(
-      $surfaceCaptures | ForEach-Object { [int]$_.segment }
-    )
-    $expectedSegments = @(1..$surfaceCaptures.Count)
-    if (($actualSegments -join ',') -ne ($expectedSegments -join ',')) {
-      throw "Maximized run recorded non-contiguous $($surface.name) segments."
-    }
+    Save-WorkflowManifest
+    throw 'Native capture did not record the requested visual matrix run count.'
+  }
+  $recordedCaptureCount = 0
+  foreach ($fullscreenRun in $completedRuns) {
     if (
-      -not [bool]$surfaceCaptures[0].is_first -or
-      -not [bool]$surfaceCaptures[0].panel_start_visible
+      $null -eq $fullscreenRun -or
+      $fullscreenRun.status -ne 'complete' -or
+      -not [bool]$fullscreenRun.window.maximized
     ) {
-      throw "Maximized run did not cover the beginning of $($surface.name)."
+      throw 'Native capture did not complete a maximized exact-HWND run.'
     }
-    $finalCapture = $surfaceCaptures[-1]
-    if ($singlePanelCapture -or $surface.name -eq 'Projects') {
-      if (
-        $surfaceCaptures.Count -ne 1 -or
-        $finalCapture.coverage_mode -ne 'first panel viewport' -or
-        -not [bool]$finalCapture.is_last
-      ) {
-        throw "Maximized run did not keep $($surface.name) to its first viewport."
+    $overviewCaptureCount = @(
+      $fullscreenRun.captures | Where-Object { $_.surface -eq 'Overview' }
+    ).Count
+    if ($captureOverview -and $overviewCaptureCount -ne 1) {
+      throw 'Native capture did not complete exactly one requested Overview capture.'
+    }
+    if (-not $captureOverview -and $overviewCaptureCount -ne 0) {
+      throw 'Native capture recorded an unrequested Overview capture.'
+    }
+    $unexpectedCaptures = @(
+      $fullscreenRun.captures |
+        Where-Object { $requestedSurfaces -notcontains $_.surface }
+    )
+    if ($unexpectedCaptures.Count -ne 0) {
+      throw 'Native capture recorded an unrequested Dashboard surface.'
+    }
+    $recordedCaptureCount += @($fullscreenRun.captures).Count
+    foreach ($surface in $selectedPanelSurfaces) {
+      $surfaceCaptures = @(
+        $fullscreenRun.captures | Where-Object { $_.surface -eq $surface.name }
+      )
+      if ($surfaceCaptures.Count -lt 1) {
+        throw "Maximized run did not record $($surface.name) coverage."
       }
-    } elseif (
-      -not [bool]$finalCapture.is_last -or
-      -not [bool]$finalCapture.panel_end_visible
-    ) {
-      throw "Maximized run did not establish the end of $($surface.name)."
+      $actualSegments = @(
+        $surfaceCaptures | ForEach-Object { [int]$_.segment }
+      )
+      $expectedSegments = @(1..$surfaceCaptures.Count)
+      if (($actualSegments -join ',') -ne ($expectedSegments -join ',')) {
+        throw "Maximized run recorded non-contiguous $($surface.name) segments."
+      }
+      if (
+        -not [bool]$surfaceCaptures[0].is_first -or
+        -not [bool]$surfaceCaptures[0].panel_start_visible
+      ) {
+        throw "Maximized run did not cover the beginning of $($surface.name)."
+      }
+      $finalCapture = $surfaceCaptures[-1]
+      if ($singlePanelCapture -or $surface.name -eq 'Projects') {
+        if (
+          $surfaceCaptures.Count -ne 1 -or
+          $finalCapture.coverage_mode -ne 'first panel viewport' -or
+          -not [bool]$finalCapture.is_last
+        ) {
+          throw "Maximized run did not keep $($surface.name) to its first viewport."
+        }
+      } elseif (
+        -not [bool]$finalCapture.is_last -or
+        -not [bool]$finalCapture.panel_end_visible
+      ) {
+        throw "Maximized run did not establish the end of $($surface.name)."
+      }
     }
   }
   if ($pngFiles.Count -ne $recordedCaptureCount) {
@@ -1701,7 +1918,8 @@ try {
 
   $remainingExactApp = @(Get-ExactExecutableProcesses -ExecutablePath $appPath)
   $remainingOwned = @(
-    @($script:workflowManifest.fullscreen_run.cleanup.remaining_matching_process_ids)
+    $completedRuns |
+      ForEach-Object { @($_.cleanup.remaining_matching_process_ids) }
   )
   if ($remainingExactApp.Count -ne 0 -or $remainingOwned.Count -ne 0) {
     throw 'Task app or recorded task-owned WebView2 processes remained after capture.'
@@ -1723,6 +1941,9 @@ $summary = [ordered]@{
   screenshots = $script:workflowManifest.screenshot_count
   capture_runs = @($preflight.capture_runs)
   surfaces = @($preflight.surfaces)
+  visual_matrix = $script:workflowManifest.visual_matrix
+  os_matrix = $script:workflowManifest.os_matrix
+  fallback_boundary = $script:workflowManifest.fallback_boundary
   process_cleanup = $script:workflowManifest.final_process_cleanup
   output_root = $resolvedOutputRoot
 }

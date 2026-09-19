@@ -10,11 +10,10 @@
 ```text
 docs/windows-port/roadmap/
 ├── phase-0-research/        ← 数据路径与格式调研（已完成）
-├── phase-1-core-prototype/  ← 跨平台核心读取原型（当前阶段）
+├── phase-1-core-prototype/  ← 跨平台核心读取原型（已完成）
 ├── phase-2-codex-provider/  ← Codex RuntimeProvider 完整实现
 ├── phase-3-claude-provider/ ← Claude Code RuntimeProvider 完整实现
-├── phase-4-ui/              ← Windows 系统托盘 + 主窗口
-└── phase-5-packaging/       ← 打包、签名、自动更新
+└── phase-4-ui/              ← Windows 系统托盘 + 主窗口（持续迭代）
 ```
 
 ---
@@ -94,7 +93,7 @@ docs/windows-port/roadmap/
 
 ## 阶段 4：Windows UI
 
-**状态**：🚧 当前阶段
+**状态**：🚧 基础 UI 已落地，持续迭代
 
 **目标**：系统托盘 + 弹出菜单 + 主窗口仪表盘 + 设置窗口。
 
@@ -105,20 +104,11 @@ docs/windows-port/roadmap/
 
 ---
 
-## 阶段 5：打包、签名与发布
+## 发布基线
 
-**目标**：MSI/MSIX/便携版 + 自动更新 + GitHub Release。
-
-**交付物**：
-- [`phase-5-packaging/`](phase-5-packaging/) —— 打包脚本与 CI
-- MSI/NSIS 安装包
-- 自动更新检查
-
----
-
-## 当前阶段：Phase 4
-
-见 [`phase-4-ui/`](phase-4-ui/)，开始实现 Windows UI。
+Windows 打包与发布流程已经纳入仓库级发布规范，不再维护不存在的 `phase-5-packaging/`
+目录。开发入口见 [`windows/README.md`](../../../windows/README.md)，正式发布步骤见
+[`DISTRIBUTION.md`](../../../DISTRIBUTION.md)。
 
 ---
 

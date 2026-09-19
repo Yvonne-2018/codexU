@@ -4,7 +4,7 @@
 
 ## 全网首推：AI 领导力评估模型
 
-codexU v1.3.0 在 AI 领导力模型之外新增本机推理性能监测：从最近 28 天 Codex rollout 中按模型与推理强度聚合完整调用耗时、P50/P90、有效吞吐和 reasoning token 占比。所有数据仍在本机处理，并与既有额度、用量和任务口径保持独立。
+codexU v1.3.1 在 AI 领导力模型之外提供本机推理性能监测，并补齐独立 Windows x86_64 Tauri Dashboard。所有数据仍在本机处理，并与既有额度、用量和任务口径保持独立。
 
 - **一眼看懂 AI 组织规模**：主视觉同时展示领导力得分、28 天领导 Agent 数、AI 工时和峰值并发；轨道节点随今日 Agent 动态运行。
 - **不是靠 token 刷分**：只使用本机可验证或可推导的 Agent 生命周期、父子关系、并发与自主运行证据；不可靠的成本、交付和估算区间不进入得分。
@@ -13,11 +13,24 @@ codexU v1.3.0 在 AI 领导力模型之外新增本机推理性能监测：从�
 - **本地优先、隐私优先**：评分全程在 Mac 本机完成，不上传 usage、线程、路径、日志或账户数据。
 
 > [!IMPORTANT]
-> **建议升级到 v1.3.0 或更高版本。** v1.3.0 新增本机推理性能监测，可查看模型 × 推理强度的平均耗时、P50、P90 和有效吞吐。[下载最新版本](https://github.com/Yvonne-2018/codexU/releases/latest)。
+> **建议升级到 v1.3.1 或更高版本。** v1.3.1 补齐 Windows x86_64 Dashboard，并包含本机推理性能监测和聚合边界修复。[下载最新版本](https://github.com/Yvonne-2018/codexU/releases/latest)。
 
 [产品官网](https://shanggqm.github.io/codexU-site/) · [下载最新版本](https://github.com/Yvonne-2018/codexU/releases/latest) · [English](README.en.md)
 
 codexU 是一个 macOS 菜单栏与桌面应用，用来查看 OpenAI Codex / ChatGPT Codex 和 Claude Code 的额度窗口、token 用量、今日任务和本机 AI 领导力。它把常用信息放在菜单栏和主窗口里，帮助你快速判断剩余额度、重置时间、当天工作进展，以及一个人正在调动多少 AI 劳动力。
+
+## Windows 版本已发布
+
+当前 Windows x86_64 桌面版本随 [GitHub v1.3.1 Release](https://github.com/shanggqm/codexU/releases/tag/v1.3.1) 提供，并包含完整的独立 Tauri Dashboard；安装包提供 MSI 与 NSIS 两种方式：
+
+- `codexU-1.3.1-windows-x86_64.msi`：适合通过 Windows Installer 安装。
+- `codexU-1.3.1-windows-x86_64-setup.exe`：适合通过 NSIS 安装向导安装。
+- 支持 Windows 10/11 x86_64；Windows ARM64 当前尚未打包。
+- 验证环境说明：本轮 Windows V0 的原生视觉矩阵与 shell lifecycle 验收在按 build `26200` 归类的 Windows 11 环境完成；Windows 10 仍是支持目标，但未在本轮实机观测。
+- Windows 版本读取 `%USERPROFILE%\.codex\` 等本机数据，保持本地优先和隐私边界，不上传 usage、线程、路径、日志或账户数据。
+- Windows 版本当前只支持 Codex，暂不支持 Claude Code。
+
+Windows 版本是独立的 Tauri 桌面实现，当前发布包尚未由仓库默认流程进行代码签名；Windows 可能在首次运行时显示安全提示。Windows 与 macOS 的功能实现仍在分别演进，当前功能覆盖并不完全相同。
 
 ## 界面截图
 
@@ -127,6 +140,15 @@ codexU 需要读取本机 `~/.codex/` 下的 Codex 数据；如果启用 Claude 
 
 安装后，codexU 默认每天最多自动检查一次 GitHub Release 是否有新版本，并接收 beta 版本。该检查只读取公开 Release 元数据；发现新版时会打开浏览器下载 DMG 或查看 Release 页面，安装仍由你手动完成。可以在设置窗口的系统区关闭自动检查，或手动点击“检查更新”。
 
+### Windows
+
+从 [GitHub Release](https://github.com/shanggqm/codexU/releases/latest) 下载 Windows x86_64 安装包：
+
+- MSI：`codexU-<version>-windows-x86_64.msi`
+- NSIS：`codexU-<version>-windows-x86_64-setup.exe`
+
+运行安装程序并按向导完成安装。每个安装包旁边都提供对应的 `.sha256` 校验文件；发布包的构建、校验和当前限制见 [DISTRIBUTION.md](DISTRIBUTION.md)。
+
 ## 运行要求
 
 - macOS 13 或更新版本。
@@ -135,6 +157,12 @@ codexU 需要读取本机 `~/.codex/` 下的 Codex 数据；如果启用 Claude 
 - Codex 至少使用过一次，以便生成 `~/.codex/state_5.sqlite`。
 - Claude Code 统计为可选能力；历史 token 来自 `~/.claude/projects/**/*.jsonl`，额度需要本地 statusLine snapshot cache。
 - 从源码构建时需要 Xcode Command Line Tools。
+
+### Windows
+
+- Windows 10 或更新版本（x86_64）。
+- 本机已安装 Codex，并且已经生成 `%USERPROFILE%\.codex\` 下的本机数据。
+- Windows 版本当前只支持 Codex；Windows ARM64 当前不在发布范围内。
 
 ## 从源码构建
 
@@ -177,10 +205,10 @@ make release-all
 产物会写入 `dist/`，例如：
 
 ```text
-dist/codexU-1.3.0-mac-arm64.dmg
-dist/codexU-1.3.0-mac-arm64.dmg.sha256
-dist/codexU-1.3.0-mac-x86_64.dmg
-dist/codexU-1.3.0-mac-x86_64.dmg.sha256
+dist/codexU-1.3.1-mac-arm64.dmg
+dist/codexU-1.3.1-mac-arm64.dmg.sha256
+dist/codexU-1.3.1-mac-x86_64.dmg
+dist/codexU-1.3.1-mac-x86_64.dmg.sha256
 ```
 
 Developer ID 签名和 Apple notarization 流程见 [DISTRIBUTION.md](DISTRIBUTION.md)。

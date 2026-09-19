@@ -35,6 +35,10 @@ Assert-True ($null -ne $mainWindow) 'The Tauri main window configuration is miss
 Assert-True (-not [bool]$mainWindow.visible) 'The main window must be hidden until startup explicitly shows it.'
 Assert-True (-not [bool]$mainWindow.focus) 'The main window must not request focus during native capture startup.'
 $mainSourceText = Get-Content -LiteralPath $mainSource -Raw -Encoding UTF8
+$entryText = Get-Content -LiteralPath $entry -Raw -Encoding UTF8
+Assert-True (
+  $mainSourceText -match 'const\s+HWND_BOTTOM:\s*isize\s*=\s*1\s*;'
+) 'Background startup must use the Win32 HWND_BOTTOM value 1, not HWND_NOTOPMOST (-2).'
 Assert-True (
   $mainSourceText -match '(?s)if background_capture.*?prepare_background_capture_window\(\&window\).*?show_background_capture_window\(\&window\).*?else.*?window\.show\(\).*?window\.set_focus\(\)'
 ) 'Startup must use the native non-activating show path for capture, while only normal startup requests focus.'
@@ -156,6 +160,78 @@ Assert-True (
 Assert-True (
   -not (Test-Path -LiteralPath $singleSurfaceOutput)
 ) 'Single-surface preflight created the requested runtime output directory.'
+
+$matrixOutput = Join-Path $repositoryRoot (
+  '.local-artifacts\windows-visual-captures\preflight-matrix-' +
+  [guid]::NewGuid().ToString('N')
+)
+$matrixLines = @(
+  & $powershell -NoProfile -ExecutionPolicy Bypass -File $entry `
+    -PreflightOnly `
+    -Matrix `
+    -Surface 'Overview' `
+    -OutputRoot $matrixOutput 2>&1
+)
+$matrixExitCode = $LASTEXITCODE
+Assert-True ($matrixExitCode -eq 0) "Matrix preflight failed with exit code $matrixExitCode."
+$matrixManifestLine = @(
+  $matrixLines | Where-Object { "$($_)".StartsWith('NATIVE_VISUAL_PREFLIGHT=') }
+)
+Assert-True (
+  $matrixManifestLine.Count -eq 1
+) 'Matrix preflight did not emit exactly one manifest line.'
+$matrixManifest = "$($matrixManifestLine[0])".Substring(
+  'NATIVE_VISUAL_PREFLIGHT='.Length
+) | ConvertFrom-Json
+Assert-Sequence @($matrixManifest.surfaces) @('Overview') 'Matrix preflight selected extra surfaces.'
+Assert-True (
+  @($matrixManifest.visual_matrix.requested_cells).Count -eq 6
+) 'Matrix preflight did not request Light/Dark times default/cool/warm palette coverage.'
+Assert-Sequence `
+  @($matrixManifest.visual_matrix.requested_cells | ForEach-Object { $_.theme } | Select-Object -Unique) `
+  @('light', 'dark') `
+  'Matrix preflight did not request both Light and Dark themes.'
+Assert-Sequence `
+  @($matrixManifest.visual_matrix.requested_cells | ForEach-Object { $_.palette_id } | Select-Object -Unique) `
+  @('codexu.default', 'codexu.blue-white-porcelain', 'codexu.dunhuang-apsara') `
+  'Matrix preflight did not request default plus representative cool and warm palettes.'
+Assert-True (
+  "$($matrixManifest.os_matrix.windows_10.status)" -in @('OBSERVED', 'NOT OBSERVED')
+) 'Matrix preflight did not record Windows 10 observation status.'
+Assert-True (
+  "$($matrixManifest.os_matrix.windows_11.status)" -in @('OBSERVED', 'NOT OBSERVED')
+) 'Matrix preflight did not record Windows 11 observation status.'
+Assert-True (
+  @($matrixManifest.os_matrix.windows_10.status, $matrixManifest.os_matrix.windows_11.status) -contains 'NOT OBSERVED'
+) 'Matrix preflight must honestly mark the non-current Windows major version NOT OBSERVED.'
+Assert-True (
+  $matrixManifest.fallback_boundary.css_backdrop_filter_fallback -eq 'source-level CSS fallback only'
+) 'Matrix preflight did not separate CSS backdrop-filter fallback.'
+Assert-True (
+  $matrixManifest.fallback_boundary.native_transparency_fallback -eq 'NOT OBSERVED by CSS fallback'
+) 'Matrix preflight incorrectly promoted CSS fallback to native transparency evidence.'
+Assert-True (
+  $matrixManifest.fallback_boundary.dwm_composition_fallback -eq 'NOT OBSERVED by CSS fallback'
+) 'Matrix preflight incorrectly promoted CSS fallback to DWM evidence.'
+Assert-True (
+  $matrixManifest.fallback_boundary.webview2_transparency_fallback -eq 'NOT OBSERVED by CSS fallback'
+) 'Matrix preflight incorrectly promoted CSS fallback to WebView2 evidence.'
+Assert-True (
+  $matrixManifest.settings_injection -eq 'task-local app_data_dir selected per matrix cell'
+) 'Matrix preflight did not isolate theme/palette settings in the task-local app-data path.'
+Assert-True (
+  $matrixManifest.settings_restore_policy -eq 'no user settings touched'
+) 'Matrix preflight did not preserve the real user settings path.'
+Assert-True (
+  $entryText.Contains('CODEXU_CAPTURE_APP_DATA_DIR') -and
+  $mainSourceText.Contains('CODEXU_CAPTURE_APP_DATA_DIR')
+) 'Capture workflow and Tauri startup must share the task-local app-data override.'
+Assert-True (
+  $entryText -notmatch 'Get-ActualAppDataSettingsPath|Stage-ActualAppDataSettings|Restore-ActualAppDataSettings'
+) 'Capture workflow must not stage or restore the real user settings file.'
+Assert-True (
+  -not (Test-Path -LiteralPath $matrixOutput)
+) 'Matrix preflight created the requested runtime output directory.'
 
 $defaultOutput = @(
   & $powershell -NoProfile -ExecutionPolicy Bypass -File $entry -PreflightOnly 2>&1

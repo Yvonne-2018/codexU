@@ -23,7 +23,7 @@ $dynamicLongPanels = -join @('Tasks', [char]0x3001, 'AI Leadership', [char]0x300
 $projectsFirstViewport = -join @('Projects ', [char]0x4EC5, [char]0x91C7, [char]0x96C6, [char]0x4E00, [char]0x4E2A, $maximized, [char]0x7684, [char]0x9996, [char]0x4E2A, ' viewport')
 $taskbarExclusion = -join @([char]0x4EFB, [char]0x52A1, [char]0x680F, [char]0x548C, ' Alt-Tab ', [char]0x6392, [char]0x9664)
 $nonInterference = -join @([char]0x4E0D, [char]0x4F1A, [char]0x62A2, [char]0x7126, [char]0x70B9, [char]0x6216, [char]0x8986, [char]0x76D6, [char]0x7528, [char]0x6237, [char]0x6B63, [char]0x5728, [char]0x4F7F, [char]0x7528, [char]0x7684, [char]0x7A97, [char]0x53E3)
-$windowsUiChange = -join @('Windows Dashboard UI ', [char]0x6539, [char]0x52A8, [char]0x540E)
+$windowsUiPlaywrightDefault = 'Windows Dashboard UI .*Playwright'
 $notReplacement = -join @([char]0x4E0D, [char]0x66FF, [char]0x4EE3, ' Rust', [char]0x3001, 'Web ', [char]0x5408, [char]0x540C, [char]0x6D4B, [char]0x8BD5, [char]0x548C, ' release build')
 $obsoletePatterns = @(
   "960${times}760",
@@ -67,7 +67,7 @@ Assert-True ($readme.Contains('Test-NativeVisualCaptureWorkflow.ps1')) 'windows/
 Assert-True ($readme.Contains('Test-NativeVisualCaptureCoverage.ps1')) 'windows/README.md must document the live coverage test.'
 Assert-True ($readme.Contains($taskbarExclusion)) 'windows/README.md must document taskbar and Alt-Tab exclusion.'
 Assert-True ($readme.Contains($nonInterference)) 'windows/README.md must preserve the non-interference priority.'
-Assert-True ($contentByFile['AGENTS.md'].Contains($windowsUiChange)) 'AGENTS.md must route Windows UI changes through native visual preflight.'
+Assert-True ([regex]::IsMatch($contentByFile['AGENTS.md'], $windowsUiPlaywrightDefault)) 'AGENTS.md must route Windows UI visual validation through Playwright by default.'
 Assert-True ($contentByFile['AGENTS.md'].Contains('non-activating')) 'AGENTS.md must preserve the non-activating capture contract.'
 Assert-True ($contentByFile['AGENTS.md'].Contains('Test-NativeVisualCaptureCoverage.ps1')) 'AGENTS.md must document the live native visual coverage test.'
 Assert-True ($contentByFile['AGENTS.md'].Contains($notReplacement)) 'AGENTS.md must distinguish native visual acceptance from code-level tests.'

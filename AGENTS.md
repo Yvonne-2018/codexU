@@ -88,7 +88,8 @@ git diff --check
 - 代码改动后运行 `make build`。
 - 数据读取或聚合逻辑改动后运行 `make probe` 或 `--dump-json`。
 - UI 改动后启动本地 app 进行人工检查。
-- Windows Dashboard UI 改动后，先运行原生视觉 workflow preflight；需要证明真实窗口行为时，再运行 coverage 测试或完整采集。采集窗口必须保持最大化、non-activating、保留用户当前前台窗口，并作为 tool window 排除在任务栏和 Alt-Tab 之外。
+- 默认使用 Playwright 进行 UI、视觉和交互验证，包括页面截图、表面切换、滚动、hover/focus、tooltip、文本和数字显示；除非用户直接指定，否则不要用 Tauri 原生截图或 Computer Use 代替 Playwright。
+- Windows Dashboard UI 改动默认先运行 Playwright 全表面验证。只有用户直接要求验证真实 Tauri 窗口、HWND、DPI、窗口层级或原生发布包行为时，才运行下面的原生视觉 workflow；采集窗口必须保持最大化、non-activating、保留用户当前前台窗口，并作为 tool window 排除在任务栏和 Alt-Tab 之外。
 - 文档-only 改动至少运行 `git diff --check`。
 
 Windows 原生视觉验收的最小入口（从仓库根目录运行）：

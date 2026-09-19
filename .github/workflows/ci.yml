@@ -38,3 +38,23 @@ jobs:
       - name: Test Windows Rust workspace
         working-directory: windows
         run: cargo test --workspace
+
+  windows-web:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: windows/apps/codexu-tauri/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/apps/codexu-tauri/web/package-lock.json
+      - name: Install Windows Web dependencies
+        run: npm ci
+      - name: Build Windows Web
+        run: npm run build
+      - name: Test Windows Web contracts
+        run: npm run test:contracts

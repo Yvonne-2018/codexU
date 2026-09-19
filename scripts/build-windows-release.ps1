@@ -17,7 +17,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+([\-+][0-9A-Za-z.-]+)?$') {
     throw "Version must be a semantic version, for example 1.2.1 or 1.2.1-beta.1: $Version"
 }
 
-if ($env:OS -ne "Windows_NT") {
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
     throw "The Windows packaging script must run on a Windows runner."
 }
 
@@ -94,31 +94,48 @@ finally {
     Pop-Location
 }
 
-$TauriConfig = '{"version":"' + $Version + '"}'
-Push-Location $AppRoot
+$TauriConfigPath = Join-Path ([System.IO.Path]::GetTempPath()) ("codexu-tauri-config-" + [Guid]::NewGuid().ToString("N") + ".json")
+$TauriConfig = @{ version = $Version } | ConvertTo-Json -Compress
 try {
-    if (-not (Get-Command cargo-tauri -ErrorAction SilentlyContinue)) {
-        $TauriInstalled = $true
+    [System.IO.File]::WriteAllText(
+        $TauriConfigPath,
+        $TauriConfig,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+
+    Push-Location $AppRoot
+    try {
+        $TauriCliVersion = "2.6.2"
+        $TauriVersionOutput = ""
+        $TauriInstalled = $false
         try {
-            & cargo "+$Toolchain" "tauri" "--version" *> $null
-            $TauriInstalled = ($LASTEXITCODE -eq 0)
+            $TauriVersionOutput = (& cargo "+$Toolchain" "tauri" "--version" 2>&1 | Out-String).Trim()
+            $TauriInstalled = (
+                $LASTEXITCODE -eq 0 -and
+                $TauriVersionOutput -match ("tauri-cli\s+" + [regex]::Escape($TauriCliVersion) + "(?:\s|$)")
+            )
         }
         catch {
             $TauriInstalled = $false
         }
         if (-not $TauriInstalled) {
-            Invoke-Checked "cargo" @("+$Toolchain", "install", "tauri-cli", "--version", "2.6.2", "--locked")
+            Invoke-Checked "cargo" @("+$Toolchain", "install", "tauri-cli", "--version", $TauriCliVersion, "--locked", "--force")
         }
-    }
 
-    Invoke-Checked "cargo" @(
-        "+$Toolchain", "tauri", "build",
-        "--config", $TauriConfig,
-        "--bundles", "msi,nsis"
-    )
+        Invoke-Checked "cargo" @(
+            "+$Toolchain", "tauri", "build",
+            "--config", $TauriConfigPath,
+            "--bundles", "msi,nsis"
+        )
+    }
+    finally {
+        Pop-Location
+    }
 }
 finally {
-    Pop-Location
+    if (Test-Path -LiteralPath $TauriConfigPath) {
+        Remove-Item -LiteralPath $TauriConfigPath -Force
+    }
 }
 
 $BundleRoots = @(
