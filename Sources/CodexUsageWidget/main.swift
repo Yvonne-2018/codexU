@@ -1312,6 +1312,7 @@ final class CodexUsageReader {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: codexPath)
         process.arguments = ["app-server"]
+        process.environment = codexProcessEnvironment()
 
         let input = Pipe()
         let output = Pipe()
@@ -3336,6 +3337,23 @@ final class CodexUsageReader {
         ])
 
         return firstExistingPath(candidates)
+    }
+
+    /// GUI apps launched by Finder do not inherit shell startup paths. The npm
+    /// Codex launcher uses `/usr/bin/env node`, so add standard Homebrew Node
+    /// locations when they are installed before launching the app-server.
+    private func codexProcessEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        var pathEntries = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
+        for directory in ["/opt/homebrew/bin", "/usr/local/bin"] {
+            let nodePath = (directory as NSString).appendingPathComponent("node")
+            guard fileManager.isExecutableFile(atPath: nodePath), !pathEntries.contains(directory) else {
+                continue
+            }
+            pathEntries.insert(directory, at: 0)
+        }
+        environment["PATH"] = pathEntries.joined(separator: ":")
+        return environment
     }
 
     private func firstExistingPath(_ paths: [String]) -> String? {
