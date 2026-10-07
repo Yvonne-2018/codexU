@@ -79,6 +79,19 @@ finally {
     Pop-Location
 }
 
+$WebView2Loader = Get-ChildItem -LiteralPath (Join-Path $WindowsRoot "target\debug\build") -Directory -Filter "webview2-com-sys-*" -ErrorAction SilentlyContinue |
+    ForEach-Object { Join-Path $_.FullName "out\x64\WebView2Loader.dll" } |
+    Where-Object { Test-Path -LiteralPath $_ } |
+    Get-Item |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+if (-not $WebView2Loader) {
+    throw "The x64 WebView2Loader.dll was not produced by the Windows debug dependency build."
+}
+$ReleaseTargetDirectory = Join-Path $WindowsRoot "target\release"
+New-Item -ItemType Directory -Force -Path $ReleaseTargetDirectory | Out-Null
+Copy-Item -LiteralPath $WebView2Loader.FullName -Destination (Join-Path $ReleaseTargetDirectory "WebView2Loader.dll") -Force
+
 Push-Location $WebRoot
 try {
     if (Test-Path -LiteralPath (Join-Path $WebRoot "package-lock.json")) {
