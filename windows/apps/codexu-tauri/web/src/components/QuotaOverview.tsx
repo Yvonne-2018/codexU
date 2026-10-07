@@ -93,19 +93,8 @@ export function QuotaOverview({ snapshot, sourceLabel, status, onRefresh }: Quot
             ) : null}
           </div>
         </div>
-        <span className={`dashboard-overview-status ${hasQuota ? 'dashboard-overview-status-confirmed' : ''}`}>
-          {statusText}
-        </span>
-      </div>
-
-      {hasQuota ? (
-        <div className="quota-overview-content">
-          <div className="quota-overview-windows">
-            {quotaWindows.map(({ label, window }) => (
-              <QuotaWindow key={label} label={label} window={window} now={now} t={t} />
-            ))}
-          </div>
-          <div className="quota-overview-state quota-overview-state-confirmed">
+        {hasQuota ? (
+          <div className="quota-overview-state quota-overview-state-confirmed quota-overview-state-header">
             <div className="quota-overview-state-copy">
               <CheckCircle2 size={18} aria-hidden="true" />
               <div>
@@ -114,6 +103,16 @@ export function QuotaOverview({ snapshot, sourceLabel, status, onRefresh }: Quot
               </div>
             </div>
           </div>
+        ) : (
+          <span className="dashboard-overview-status">{statusText}</span>
+        )}
+      </div>
+
+      {hasQuota ? (
+        <div className="quota-overview-windows">
+          {quotaWindows.map(({ label, window }) => (
+            <QuotaWindow key={label} label={label} window={window} now={now} t={t} />
+          ))}
         </div>
       ) : (
         <div className="quota-overview-state quota-overview-state-empty">

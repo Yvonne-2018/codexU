@@ -147,7 +147,8 @@ async function enterSurface(page, surface) {
       windows.map((window) => window.getBoundingClientRect().toJSON()),
     );
     if (quotaWindowBoxes.length > 1) {
-      expect(Math.abs(quotaWindowBoxes[1].y - quotaWindowBoxes[0].y)).toBeLessThan(2);
+      expect(Math.abs(quotaWindowBoxes[1].x - quotaWindowBoxes[0].x)).toBeLessThan(2);
+      expect(quotaWindowBoxes[1].y).toBeGreaterThan(quotaWindowBoxes[0].y);
     }
     return page.locator('.dashboard-home-overview');
   }
