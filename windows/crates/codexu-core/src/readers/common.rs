@@ -682,9 +682,9 @@ pub fn truncate_title(title: &str) -> String {
 
 /// Estimates USD cost from a token breakdown and an optional model name.
 ///
-/// Supports Claude and OpenAI/Codex model families with approximate list prices.
-/// Prices are per-million-tokens and are best-effort; update them when official
-/// pricing changes. When the model is unknown the cost is zero.
+/// Supports Claude and OpenAI/Codex model families with best-effort rates.
+/// GPT-6 uses published standard Codex prices; other prices may be approximate.
+/// Rates are per million tokens. When the model is unknown the cost is zero.
 pub fn estimated_cost_usd(tokens: &TokenBreakdown, model: Option<&str>) -> f64 {
     let model_lower = model.map(|m| m.to_lowercase());
     let m = model_lower.as_deref();
@@ -694,6 +694,16 @@ pub fn estimated_cost_usd(tokens: &TokenBreakdown, model: Option<&str>) -> f64 {
         Some((3.0, 0.3, 15.0))
     } else if m == Some("claude-haiku") || m.map(|s| s.contains("haiku")).unwrap_or(false) {
         Some((0.8, 0.08, 4.0))
+    } else if m.map(|s| s.contains("gpt-6-astra-law")).unwrap_or(false) {
+        Some((12.5, 1.25, 62.5))
+    } else if m.map(|s| s.contains("gpt-6.1-sol")).unwrap_or(false) {
+        Some((2.0, 0.1, 10.0))
+    } else if m.map(|s| s.contains("gpt-6-sol")).unwrap_or(false) {
+        Some((2.0, 0.2, 10.0))
+    } else if m.map(|s| s.contains("gpt-6-luna")).unwrap_or(false) {
+        Some((0.1, 0.01, 0.5))
+    } else if m.map(|s| s.contains("gpt-6-astra")).unwrap_or(false) {
+        Some((10.0, 1.0, 50.0))
     } else if m.map(|s| s.contains("gpt-5.5")).unwrap_or(false) {
         // Approximate higher-tier GPT-5.5 pricing.
         Some((5.0, 1.25, 20.0))
@@ -802,5 +812,31 @@ mod tests {
         assert_eq!(trends[0].model.as_deref(), Some("unknown"));
         assert_eq!(trends[0].summary.seven_day.tokens.total_tokens, 100);
         assert_eq!(trends[0].active_day_count, 1);
+    }
+
+    #[test]
+    fn estimates_gpt6_models_at_standard_codex_rates() {
+        let tokens = TokenBreakdown {
+            input_tokens: 2_000_000,
+            cached_input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            reasoning_output_tokens: 0,
+            total_tokens: 3_000_000,
+        };
+        let cases = [
+            ("gpt-6.1-sol", 12.1),
+            ("gpt-6-sol", 12.2),
+            ("gpt-6-luna", 0.61),
+            ("gpt-6-astra", 61.0),
+            ("gpt-6-astra-law", 76.25),
+        ];
+
+        for (model, expected) in cases {
+            let cost = estimated_cost_usd(&tokens, Some(model));
+            assert!(
+                (cost - expected).abs() < 1e-10,
+                "unexpected estimate for {model}: {cost}"
+            );
+        }
     }
 }
