@@ -288,7 +288,7 @@ fn combine_session_metadata(
                 file_path: s.file_path,
                 session_id: s.session_id,
                 project_path: project_path.clone(),
-                model,
+                model: model.clone(),
                 last_active_at,
                 deltas: s
                     .deltas
@@ -297,7 +297,7 @@ fn combine_session_metadata(
                         message_id: d.turn_id,
                         date: d.date,
                         tokens: d.tokens,
-                        model: d.model,
+                        model: d.model.or_else(|| model.clone()),
                         project_path: project_path.clone(),
                         session_id: d.session_id,
                     })
@@ -1470,6 +1470,13 @@ mod tests {
         assert_eq!(thread.cwd, "h:\\project\\demo");
         assert_eq!(thread.model.as_deref(), Some("gpt-5.4"));
         assert!(thread.archived);
+        let estimated_cost = usage
+            .detailed_usage
+            .as_ref()
+            .expect("detailed usage")
+            .lifetime
+            .estimated_cost_usd;
+        assert!((estimated_cost - 0.00075).abs() < 1e-12);
 
         let projects = &usage.project_board.as_ref().unwrap().all_projects;
         assert_eq!(projects[0].full_path, "h:\\project\\demo");
