@@ -715,32 +715,6 @@ body {
     grid-area: month;
   }
 
-  @media (min-width: 640px) {
-    .quota-overview-windows {
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-    }
-
-    .quota-overview-state-confirmed {
-      min-height: 0;
-      flex-direction: row;
-      justify-content: flex-start;
-      padding: 0.45rem 0.7rem;
-      text-align: left;
-    }
-
-    .quota-overview-state-confirmed .quota-overview-state-copy {
-      flex-direction: row;
-      align-items: center;
-      text-align: left;
-    }
-
-    .quota-overview-state-confirmed .quota-overview-state-copy > svg {
-      width: 2rem;
-      height: 2rem;
-      padding: 0.42rem;
-    }
-  }
-
   .dashboard-home .glass-panel {
     min-height: 0;
   }
@@ -910,7 +884,44 @@ body {
   .quota-overview-windows {
     display: grid;
     gap: 0.55rem;
-    margin-top: 0.25rem;
+  }
+
+  .quota-overview-content {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.35rem;
+  }
+
+  @media (min-width: 640px) {
+    .quota-overview-content {
+      grid-template-columns: minmax(0, 2fr) minmax(170px, 1fr);
+      align-items: stretch;
+    }
+
+    .quota-overview-windows {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+      align-content: start;
+    }
+
+    .quota-overview-state-confirmed {
+      min-height: 0;
+      margin-top: 0;
+      padding: 0.55rem;
+      text-align: left;
+    }
+
+    .quota-overview-state-confirmed .quota-overview-state-copy {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.45rem;
+      text-align: left;
+    }
+
+    .quota-overview-state-confirmed .quota-overview-state-copy > svg {
+      width: 1.75rem;
+      height: 1.75rem;
+      padding: 0.38rem;
+    }
   }
 
   .quota-overview-window {

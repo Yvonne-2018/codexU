@@ -99,22 +99,22 @@ export function QuotaOverview({ snapshot, sourceLabel, status, onRefresh }: Quot
       </div>
 
       {hasQuota ? (
-        <>
-          <div className="quota-overview-state quota-overview-state-confirmed">
-            <div className="quota-overview-state-copy">
-              <CheckCircle2 size={18} aria-hidden="true" />
-              <div>
-              <strong>{t('quota.officialSource')}</strong>
-              <p>{t('quota.confirmedOnly')}</p>
-              </div>
-            </div>
-          </div>
+        <div className="quota-overview-content">
           <div className="quota-overview-windows">
             {quotaWindows.map(({ label, window }) => (
               <QuotaWindow key={label} label={label} window={window} now={now} t={t} />
             ))}
           </div>
-        </>
+          <div className="quota-overview-state quota-overview-state-confirmed">
+            <div className="quota-overview-state-copy">
+              <CheckCircle2 size={18} aria-hidden="true" />
+              <div>
+                <strong>{t('quota.officialSource')}</strong>
+                <p>{t('quota.confirmedOnly')}</p>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="quota-overview-state quota-overview-state-empty">
           <div className="quota-overview-state-copy">
