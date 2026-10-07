@@ -70,6 +70,23 @@ if ($InstalledToolchains -notmatch [regex]::Escape($Toolchain)) {
     Invoke-Checked "rustup" @("toolchain", "install", $Toolchain, "--profile", "minimal", "--component", "rustfmt")
 }
 
+$CargoMetadataJson = (& cargo "+$Toolchain" "metadata" "--format-version" "1" "--manifest-path" (Join-Path $WindowsRoot "Cargo.toml") | Out-String)
+if ($LASTEXITCODE -ne 0) {
+    throw "cargo metadata failed with exit code $LASTEXITCODE"
+}
+$CargoMetadata = $CargoMetadataJson | ConvertFrom-Json
+$WebView2Package = $CargoMetadata.packages | Where-Object name -eq "webview2-com-sys" | Select-Object -First 1
+if (-not $WebView2Package) {
+    throw "The resolved webview2-com-sys dependency was not found in Cargo metadata."
+}
+$WebView2LoaderSource = Join-Path (Split-Path $WebView2Package.manifest_path -Parent) "x64\WebView2Loader.dll"
+if (-not (Test-Path -LiteralPath $WebView2LoaderSource)) {
+    throw "The x64 WebView2Loader.dll is missing from the resolved webview2-com-sys package."
+}
+$ReleaseTargetDirectory = Join-Path $WindowsRoot "target\release"
+New-Item -ItemType Directory -Force -Path $ReleaseTargetDirectory | Out-Null
+Copy-Item -LiteralPath $WebView2LoaderSource -Destination (Join-Path $ReleaseTargetDirectory "WebView2Loader.dll") -Force
+
 Push-Location $WindowsRoot
 try {
     Invoke-Checked "cargo" @("+$Toolchain", "fmt", "--all", "--", "--check")
@@ -78,19 +95,6 @@ try {
 finally {
     Pop-Location
 }
-
-$WebView2Loader = Get-ChildItem -LiteralPath (Join-Path $WindowsRoot "target\debug\build") -Directory -Filter "webview2-com-sys-*" -ErrorAction SilentlyContinue |
-    ForEach-Object { Join-Path $_.FullName "out\x64\WebView2Loader.dll" } |
-    Where-Object { Test-Path -LiteralPath $_ } |
-    Get-Item |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-if (-not $WebView2Loader) {
-    throw "The x64 WebView2Loader.dll was not produced by the Windows debug dependency build."
-}
-$ReleaseTargetDirectory = Join-Path $WindowsRoot "target\release"
-New-Item -ItemType Directory -Force -Path $ReleaseTargetDirectory | Out-Null
-Copy-Item -LiteralPath $WebView2Loader.FullName -Destination (Join-Path $ReleaseTargetDirectory "WebView2Loader.dll") -Force
 
 Push-Location $WebRoot
 try {
