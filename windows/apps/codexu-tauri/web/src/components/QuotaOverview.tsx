@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Gauge, RefreshCw, ShieldAlert } from 'lucide-react';
 import { type RateWindow, type UsageSnapshot } from '../types/models';
 import { useI18n } from '../i18n/I18nProvider';
@@ -13,8 +14,10 @@ function formatQuotaReset(value: number | null | undefined, t: ReturnType<typeof
   return value == null ? t('quota.resetTimeNotProvided') : t('quota.resets', { time: new Date(value).toLocaleString() });
 }
 
-function formatDuration(value: number | null | undefined, t: ReturnType<typeof useI18n>['t']): string {
-  return value == null ? t('common.notAvailable') : t('quota.windowMinutes', { value });
+function formatResetRemaining(value: number | null | undefined, now: number, t: ReturnType<typeof useI18n>['t']): string {
+  if (value == null || !Number.isFinite(value)) return t('common.notAvailable');
+  const minutes = Math.max(0, Math.ceil((value - now) / 60_000));
+  return t('quota.resetInMinutes', { value: minutes });
 }
 
 function clampPercent(value: number | null | undefined): number {
@@ -22,7 +25,7 @@ function clampPercent(value: number | null | undefined): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function QuotaWindow({ label, window, t }: { label: string; window: RateWindow; t: ReturnType<typeof useI18n>['t'] }) {
+function QuotaWindow({ label, window, now, t }: { label: string; window: RateWindow; now: number; t: ReturnType<typeof useI18n>['t'] }) {
   const percent = clampPercent(window.used_percent);
   return (
     <article className="quota-overview-window">
@@ -41,7 +44,7 @@ function QuotaWindow({ label, window, t }: { label: string; window: RateWindow; 
         <span className="quota-overview-fill" style={{ width: `${percent}%` }} />
       </div>
       <div className="quota-overview-window-meta">
-        <span>{formatDuration(window.window_duration_mins, t)}</span>
+        <span>{formatResetRemaining(window.resets_at, now, t)}</span>
         <span>{formatQuotaReset(window.resets_at, t)}</span>
       </div>
     </article>
@@ -50,6 +53,11 @@ function QuotaWindow({ label, window, t }: { label: string; window: RateWindow; 
 
 export function QuotaOverview({ snapshot, sourceLabel, status, onRefresh }: QuotaOverviewProps) {
   const { t } = useI18n();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const quotaDisabled = status === 'quota_disabled';
   const quotaWindows = [
     { label: t('quota.fiveHour'), window: snapshot?.five_hour_quota },
@@ -103,7 +111,7 @@ export function QuotaOverview({ snapshot, sourceLabel, status, onRefresh }: Quot
           </div>
           <div className="quota-overview-windows">
             {quotaWindows.map(({ label, window }) => (
-              <QuotaWindow key={label} label={label} window={window} t={t} />
+              <QuotaWindow key={label} label={label} window={window} now={now} t={t} />
             ))}
           </div>
         </>

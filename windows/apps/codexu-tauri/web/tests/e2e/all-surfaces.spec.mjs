@@ -47,6 +47,9 @@ test('captures the fixed eight Web surfaces with deterministic visual data', asy
     const pagePath = path.join(evidenceRoot, surface.id, 'page.png');
     await mkdir(path.dirname(focusedPath), { recursive: true });
     await focused.screenshot({ path: focusedPath });
+    if (surface.id === 'overview') {
+      await page.locator('.dashboard-home-quota').screenshot({ path: path.join(evidenceRoot, surface.id, 'quota-card.png') });
+    }
     await page.screenshot({ path: pagePath, fullPage: true });
 
     const observedState = await observeDataState(page, surface, visualData.dashboard);
@@ -134,6 +137,7 @@ async function enterSurface(page, surface) {
   await expect(page.locator('.dashboard-home')).toBeVisible();
   if (surface.id === 'overview') {
     await expect(page.locator('.dashboard-home-overview')).toBeVisible();
+    await expect(page.locator('.quota-overview-window-meta span').first()).toHaveText(/^(Resets in \d+ min|距重置 \d+ 分钟)$/);
     return page.locator('.dashboard-home-overview');
   }
 
