@@ -1500,7 +1500,7 @@ body {
 @media (min-width: 930px) {
   .dashboard-home-overview {
     grid-template-columns: minmax(154px, 0.72fr) minmax(0, 2.1fr);
-    grid-template-areas: "command metrics" "command month" "quota quota";
+    grid-template-areas: "command metrics" "command month" "command quota";
     align-items: stretch;
   }
 
