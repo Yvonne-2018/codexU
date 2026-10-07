@@ -97,13 +97,6 @@ export function DashboardHome({
           onOpen={() => setActiveDashboardTab('leadership')}
         />
 
-        <QuotaOverview
-          snapshot={snapshot}
-          sourceLabel={quotaSourceLabel}
-          status={quotaStatus}
-          onRefresh={onQuotaRefresh}
-        />
-
         <section className="dashboard-home-metrics" aria-label={t('dashboard.aria.localTokenMetrics')}>
           <StatCard
             label={t('dashboard.metrics.today')}
@@ -146,6 +139,13 @@ export function DashboardHome({
         <div className="dashboard-home-monthly">
           <MonthlyValueProgress usage={usage} />
         </div>
+
+        <QuotaOverview
+          snapshot={snapshot}
+          sourceLabel={quotaSourceLabel}
+          status={quotaStatus}
+          onRefresh={onQuotaRefresh}
+        />
       </div>
 
       <div

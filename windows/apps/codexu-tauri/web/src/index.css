@@ -695,7 +695,7 @@ body {
 
   .dashboard-home-overview {
     display: grid;
-    grid-template-areas: "command" "quota" "metrics" "month";
+    grid-template-areas: "command" "metrics" "month" "quota";
     gap: 0.75rem;
   }
 
@@ -713,6 +713,32 @@ body {
 
   .dashboard-home-monthly {
     grid-area: month;
+  }
+
+  @media (min-width: 640px) {
+    .quota-overview-windows {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    }
+
+    .quota-overview-state-confirmed {
+      min-height: 0;
+      flex-direction: row;
+      justify-content: flex-start;
+      padding: 0.45rem 0.7rem;
+      text-align: left;
+    }
+
+    .quota-overview-state-confirmed .quota-overview-state-copy {
+      flex-direction: row;
+      align-items: center;
+      text-align: left;
+    }
+
+    .quota-overview-state-confirmed .quota-overview-state-copy > svg {
+      width: 2rem;
+      height: 2rem;
+      padding: 0.42rem;
+    }
   }
 
   .dashboard-home .glass-panel {
@@ -1473,8 +1499,8 @@ body {
 
 @media (min-width: 930px) {
   .dashboard-home-overview {
-    grid-template-columns: minmax(154px, 0.72fr) minmax(154px, 0.72fr) minmax(0, 2.1fr);
-    grid-template-areas: "command quota metrics" "command quota month";
+    grid-template-columns: minmax(154px, 0.72fr) minmax(0, 2.1fr);
+    grid-template-areas: "command metrics" "command month" "quota quota";
     align-items: stretch;
   }
 

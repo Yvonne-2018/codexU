@@ -138,6 +138,17 @@ async function enterSurface(page, surface) {
   if (surface.id === 'overview') {
     await expect(page.locator('.dashboard-home-overview')).toBeVisible();
     await expect(page.locator('.quota-overview-window-meta span').first()).toHaveText(/^(Resets in \d+ min|距重置 \d+ 分钟)$/);
+    const monthlyBox = await page.locator('.dashboard-home-monthly').boundingBox();
+    const quotaBox = await page.locator('.dashboard-home-quota').boundingBox();
+    expect(monthlyBox).not.toBeNull();
+    expect(quotaBox).not.toBeNull();
+    expect(quotaBox.y).toBeGreaterThan(monthlyBox.y);
+    const quotaWindowBoxes = await page.locator('.quota-overview-window').evaluateAll((windows) =>
+      windows.map((window) => window.getBoundingClientRect().toJSON()),
+    );
+    if (quotaWindowBoxes.length > 1) {
+      expect(Math.abs(quotaWindowBoxes[1].y - quotaWindowBoxes[0].y)).toBeLessThan(2);
+    }
     return page.locator('.dashboard-home-overview');
   }
 
