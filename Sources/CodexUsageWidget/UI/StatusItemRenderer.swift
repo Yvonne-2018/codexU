@@ -609,7 +609,7 @@ struct StatusItemRenderer {
     }
 
     private var trackColor: NSColor {
-        NSColor.labelColor.withAlphaComponent(0.10)
+        NSColor.labelColor
     }
 
     private var primaryTextColor: NSColor {
