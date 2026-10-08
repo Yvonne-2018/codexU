@@ -575,9 +575,25 @@ pub fn estimated_cost_usd(tokens: &TokenBreakdown, model: Option<&str>) -> f64 {
         Some((3.0, 0.3, 15.0))
     } else if m == Some("claude-haiku") || m.map(|s| s.contains("haiku")).unwrap_or(false) {
         Some((0.8, 0.08, 4.0))
+    } else if m.map(|s| s.contains("gpt-6.1-sol")).unwrap_or(false) {
+        Some((2.0, 0.1, 10.0))
+    } else if m.map(|s| s.contains("gpt-6-astra")).unwrap_or(false) {
+        Some((10.0, 1.0, 50.0))
+    } else if m.map(|s| s.contains("gpt-6-luna")).unwrap_or(false) {
+        Some((0.1, 0.01, 0.5))
+    } else if m.map(|s| s.contains("gpt-6-sol") || s == "gpt-6").unwrap_or(false) {
+        Some((2.0, 0.2, 10.0))
+    } else if m
+        .map(|s| s.contains("gpt-5.6-sol") || s == "gpt-5.6")
+        .unwrap_or(false)
+    {
+        Some((4.0, 0.4, 20.0))
+    } else if m.map(|s| s.contains("gpt-5.6-terra")).unwrap_or(false) {
+        Some((2.0, 0.2, 12.0))
+    } else if m.map(|s| s.contains("gpt-5.6-luna")).unwrap_or(false) {
+        Some((0.2, 0.02, 1.2))
     } else if m.map(|s| s.contains("gpt-5.5")).unwrap_or(false) {
-        // Approximate higher-tier GPT-5.5 pricing.
-        Some((5.0, 1.25, 20.0))
+        Some((5.0, 0.5, 30.0))
     } else if m.map(|s| s.contains("gpt-5")).unwrap_or(false) {
         // Approximate GPT-5.4 / base GPT-5 pricing.
         Some((2.5, 0.625, 10.0))

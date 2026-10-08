@@ -99,7 +99,7 @@ API 等效价值 =
 
 其中 cache write 和缓存命中都按不超过输入 tokens 的数量计入，避免重复计价。解析到 `service_tier = priority/fast` 时使用官方 Fast mode API 单价；支持长上下文计价的模型在单次输入超过 272K tokens 时使用官方长上下文单价。推理强度不会被额外乘一次，因为 reasoning tokens 已包含在输出 token 中。价格来源以 OpenAI 的[实时 API 定价页](https://developers.openai.com/api/docs/pricing)和对应模型页为准。
 
-本月羊毛进度会累计当月所有本机 session 的 API 等效价值。GPT-5.3-Codex-Spark 仍是 research preview，官方尚未公布最终费率；这类模型及未知模型继续按 GPT-5.5 参考价折算，并用 `≈` 明确标记为参考估算，而不会冒充官方价格。进度条的参考终点使用 `2 亿 tokens/天 * 30 天` 估算，并按 30% 未缓存输入、50% 缓存输入、20% 输出的参考 token mix 折算；当前参考价约为 `$7.75 / 1M tokens`，参考月上限约 `$46,500`。进度条采用分段非线性刻度：Plus / Pro 节点保留在前段，超过 Pro 200 后用对数比例映射到参考终点，因此条宽用于扫视阶段进展，不等同于线性美元占比。该金额只是基于 API 价格的等效估算，不代表实际账单或官方返现金额。
+本月羊毛进度会累计当月所有本机 session 的 API 等效价值。价格表覆盖 GPT-6.1 Sol、GPT-6 Sol、Astra、Luna，以及 GPT-5.6 Sol、Terra、Luna；GPT-5.3-Codex-Spark 仍是 research preview，官方尚未公布最终费率，Spark 和其他未知模型继续按 GPT-5.5 参考价折算，并用 `≈` 明确标记为参考估算。进度条的参考终点使用 `2 亿 tokens/天 * 30 天` 估算，并按 30% 未缓存输入、50% 缓存输入、20% 输出的参考 token mix 折算；固定参考价约为 `$7.75 / 1M tokens`，参考月上限约 `$46,500`。进度条采用分段非线性刻度：Plus / Pro 节点保留在前段，超过 Pro 200 后用对数比例映射到参考终点，因此条宽用于扫视阶段进展，不等同于线性美元占比。该金额只是基于 API 价格的等效估算，不代表实际账单或官方返现金额。
 
 ## 快捷键和操作
 
